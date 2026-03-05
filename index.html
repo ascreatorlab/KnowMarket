@@ -102,9 +102,58 @@
 </nav>
 
 
+<!-- AI CHAT MODAL -->
+
+<div id="aiModal" class="modal">
+
+<div class="modal-content">
+
+<div class="modal-header">
+
+<h3>
+<span class="material-icons">smart_toy</span>
+AI Assistant
+</h3>
+
+<span class="close-modal">&times;</span>
+
+</div>
+
+
+<div id="chatBody" class="chat-body">
+
+<p class="ai-msg">
+Namaste Sir Aditya 👋  
+Main mandi prices ka analysis kar sakta hoon.  
+Poochiye kya jaana hai?
+</p>
+
+</div>
+
+
+<div class="chat-input-area">
+
+<input
+type="text"
+id="aiQuery"
+placeholder="Poochiye: Tamatar kab sasta hoga?"
+>
+
+<button id="sendQuery">
+<span class="material-icons">send</span>
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script src="script.js"></script>
+
 
 </body>
 
