@@ -1,7 +1,7 @@
 {
   "id": "india-price-index",
-  "name": "India Price Index",
-  "short_name": "PriceIndex",
+  "name": "Local Market",
+"short_name": "LocalMarket",
   "description": "Real-time mandi prices across India with live map and updates.",
 
   "start_url": "/",
