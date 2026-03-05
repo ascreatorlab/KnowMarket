@@ -40,7 +40,10 @@ function renderItems(data) {
 
         </div>
         `;
+const now = new Date();
 
+document.getElementById("last-update-time").innerText =
+now.toLocaleTimeString();
     });
 
 }
