@@ -440,9 +440,22 @@ window.initializeMapplsMap = function() {
       zoom: 14, zoomControl: true, attributionControl: false
     });
     setupSwiggyCenterPin();
+    // Force enable confirm button as soon as map loads
+    forceEnableConfirm();
     console.log("✅ Map initialized");
   } catch (e) { console.error("Map error:", e); }
 };
+
+function forceEnableConfirm() {
+  const btn = document.getElementById("confirmBtn");
+  if (!btn) return;
+  btn.disabled = false;
+  btn.removeAttribute("disabled");
+  btn.style.background = "var(--primary)";
+  btn.style.opacity = "1";
+  btn.style.cursor = "pointer";
+  btn.style.pointerEvents = "auto";
+}
 
 // ===== SWIGGY STYLE CENTER PIN =====
 function setupSwiggyCenterPin() {
@@ -513,11 +526,13 @@ async function reverseGeocode(lat, lng) {
     currentLocation = { lat, lng, name, fullAddr };
     // Always enable confirm after geocode
     if (confirmBtn) confirmBtn.disabled = false;
+    forceEnableConfirm();
   } catch {
     if (nameEl) nameEl.textContent = "Location selected";
     if (addrEl) addrEl.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     currentLocation = { lat, lng, name: "Selected Location", fullAddr: "" };
     if (confirmBtn) confirmBtn.disabled = false;
+    forceEnableConfirm();
   }
 }
 
