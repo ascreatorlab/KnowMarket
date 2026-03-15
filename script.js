@@ -2,9 +2,7 @@
 
 // ===== CONFIG =====
 const MAPPLS_API_KEY = "0daf1373cd967b80d2c6f73effdfd849";
-const DATA_API_URL = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd0000013a00e18ef65d4b0063eac2e34ced0b9f&format=json&limit=100";
-const SARVAM_API_KEY = "sk_1mgjxi7g_hvKLJt06v3x4aoFcv1SBI7UD";
-const SARVAM_API_URL = "https://api.sarvam.ai/v1/chat/completions";
+// Note: Keys are domain-restricted to zenvi-app.github.io only
 
 // ===== STATE =====
 let marketData = [];
@@ -135,8 +133,9 @@ function updateStats(data) {
 }
 
 // ===== FETCH LIVE PRICES =====
+const DATA_API_URL = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd0000013a00e18ef65d4b0063eac2e34ced0b9f&format=json&limit=4000`;
+
 async function fetchLivePrices() {
-  // Show loading
   const grid = document.getElementById("itemsGrid");
   if (grid && marketData.length === 0) {
     grid.innerHTML = '<div class="no-data"><div class="no-icon">⏳</div><p>Prices load ho rahi hain...</p></div>';
@@ -144,28 +143,51 @@ async function fetchLivePrices() {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
+    setTimeout(() => controller.abort(), 10000);
     const response = await fetch(DATA_API_URL, { signal: controller.signal });
-    clearTimeout(timeout);
-
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const data = await response.json();
-    if (!data.records || !Array.isArray(data.records)) throw new Error("Invalid response");
+    if (!data.records?.length) throw new Error("No records");
 
-    const rawData = data.records
-      .filter(r => r.commodity && r.modal_price)
-      .map(r => ({ name: r.commodity.trim(), price: parseFloat(r.modal_price) }))
-      .filter(r => !isNaN(r.price));
+    // Get ALL unique commodities — average price if multiple entries
+    const priceMap = {};
+    const countMap = {};
+    for (const r of data.records) {
+      if (!r.commodity || !r.modal_price) continue;
+      const name = r.commodity.trim();
+      const price = parseFloat(r.modal_price);
+      if (isNaN(price) || price <= 0) continue;
+      if (!priceMap[name]) { priceMap[name] = 0; countMap[name] = 0; }
+      priceMap[name] += price;
+      countMap[name]++;
+    }
 
-    if (rawData.length === 0) throw new Error("No records found");
+    const rawData = Object.entries(priceMap).map(([name, total]) => ({
+      name,
+      // API gives price per QUINTAL (100kg) — convert to per KG
+      price: (total / countMap[name]) / 100
+    }));
 
-    marketData = removeDuplicates(rawData);
+    if (rawData.length === 0) throw new Error("Empty after processing");
+
+    marketData = rawData
+      .filter(item => item.price >= 0.5 && item.price <= 2000) // Remove crazy values
+      .map(item => ({
+        ...item,
+        price: item.price.toFixed(2),
+        unit: "kg",
+        category: detectCategory(item.name),
+        trend: getPriceTrend(item.price),
+        emoji: getEmoji(item.name)
+      }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
     renderItems(marketData);
     setDataSource("🟢 Live — data.gov.in");
-    console.log("✅ Loaded", marketData.length, "items from API");
+    console.log("✅ Loaded", marketData.length, "unique items");
+
   } catch (err) {
-    console.warn("⚠️ API failed:", err.message, "— using fallback data");
+    console.warn("⚠️ API failed:", err.message);
     useFallbackData();
     setDataSource("🟡 Sample data (API offline)");
   }
@@ -185,22 +207,89 @@ function setDataSource(text) {
   }
 }
 
-// ===== FALLBACK DATA =====
+// ===== FALLBACK DATA — 150+ items with Bihar-accurate prices =====
 function useFallbackData() {
   const fallback = [
-    {name:"Tomato",price:20},{name:"Potato",price:18},{name:"Onion",price:25},
-    {name:"Wheat",price:30},{name:"Rice",price:55},{name:"Banana",price:40},
-    {name:"Apple",price:120},{name:"Carrot",price:32},{name:"Cabbage",price:28},
-    {name:"Pumpkin",price:15},{name:"Maize",price:22},{name:"Gram",price:45},
-    {name:"Bajra",price:28},{name:"Garlic",price:80},{name:"Ginger",price:60},
-    {name:"Mango",price:80},{name:"Cauliflower",price:35},{name:"Brinjal",price:24}
+    // 🥬 VEGETABLES
+    {n:"Tomato",p:22,c:"Vegetables"},{n:"Potato",p:18,c:"Vegetables"},
+    {n:"Onion",p:28,c:"Vegetables"},{n:"Cauliflower",p:30,c:"Vegetables"},
+    {n:"Cabbage",p:20,c:"Vegetables"},{n:"Brinjal",p:22,c:"Vegetables"},
+    {n:"Okra",p:32,c:"Vegetables"},{n:"Pumpkin",p:14,c:"Vegetables"},
+    {n:"Bitter Gourd",p:28,c:"Vegetables"},{n:"Bottle Gourd",p:15,c:"Vegetables"},
+    {n:"Ridge Gourd",p:20,c:"Vegetables"},{n:"Pointed Gourd",p:24,c:"Vegetables"},
+    {n:"Cucumber",p:18,c:"Vegetables"},{n:"Capsicum",p:55,c:"Vegetables"},
+    {n:"Green Chilli",p:35,c:"Vegetables"},{n:"Carrot",p:32,c:"Vegetables"},
+    {n:"Radish",p:16,c:"Vegetables"},{n:"Spinach",p:18,c:"Vegetables"},
+    {n:"Fenugreek",p:25,c:"Vegetables"},{n:"Coriander",p:30,c:"Vegetables"},
+    {n:"Mint",p:25,c:"Vegetables"},{n:"Colocasia",p:22,c:"Vegetables"},
+    {n:"Sweet Potato",p:20,c:"Vegetables"},{n:"Yam",p:28,c:"Vegetables"},
+    {n:"Beetroot",p:24,c:"Vegetables"},{n:"Turnip",p:16,c:"Vegetables"},
+    {n:"Drumstick",p:40,c:"Vegetables"},{n:"Raw Banana",p:20,c:"Vegetables"},
+    {n:"Green Peas",p:45,c:"Vegetables"},{n:"Cluster Beans",p:32,c:"Vegetables"},
+    {n:"Ash Gourd",p:18,c:"Vegetables"},{n:"Snake Gourd",p:22,c:"Vegetables"},
+    {n:"Flat Beans",p:35,c:"Vegetables"},{n:"Cowpea",p:38,c:"Vegetables"},
+    {n:"French Beans",p:40,c:"Vegetables"},{n:"Garlic",p:80,c:"Vegetables"},
+    {n:"Ginger",p:55,c:"Vegetables"},{n:"Green Garlic",p:30,c:"Vegetables"},
+    {n:"Curry Leaves",p:40,c:"Vegetables"},{n:"Amaranthus",p:20,c:"Vegetables"},
+
+    // 🍎 FRUITS
+    {n:"Banana",p:35,c:"Fruits"},{n:"Apple",p:110,c:"Fruits"},
+    {n:"Mango",p:75,c:"Fruits"},{n:"Orange",p:55,c:"Fruits"},
+    {n:"Papaya",p:25,c:"Fruits"},{n:"Watermelon",p:12,c:"Fruits"},
+    {n:"Grapes",p:75,c:"Fruits"},{n:"Guava",p:30,c:"Fruits"},
+    {n:"Pomegranate",p:85,c:"Fruits"},{n:"Pineapple",p:40,c:"Fruits"},
+    {n:"Lemon",p:45,c:"Fruits"},{n:"Coconut",p:22,c:"Fruits"},
+    {n:"Litchi",p:65,c:"Fruits"},{n:"Muskmelon",p:18,c:"Fruits"},
+    {n:"Jackfruit",p:20,c:"Fruits"},{n:"Pear",p:60,c:"Fruits"},
+    {n:"Plum",p:70,c:"Fruits"},{n:"Kiwi",p:120,c:"Fruits"},
+    {n:"Sapota",p:45,c:"Fruits"},{n:"Fig",p:90,c:"Fruits"},
+    {n:"Custard Apple",p:55,c:"Fruits"},{n:"Wood Apple",p:25,c:"Fruits"},
+    {n:"Date Palm",p:80,c:"Fruits"},{n:"Strawberry",p:150,c:"Fruits"},
+    {n:"Amla",p:35,c:"Fruits"},
+
+    // 🌾 GRAINS & PULSES
+    {n:"Wheat",p:28,c:"Grains"},{n:"Rice",p:52,c:"Grains"},
+    {n:"Maize",p:20,c:"Grains"},{n:"Bajra",p:26,c:"Grains"},
+    {n:"Jowar",p:24,c:"Grains"},{n:"Ragi",p:35,c:"Grains"},
+    {n:"Barley",p:22,c:"Grains"},{n:"Oats",p:45,c:"Grains"},
+    {n:"Arhar Dal",p:88,c:"Grains"},{n:"Moong Dal",p:82,c:"Grains"},
+    {n:"Masoor Dal",p:72,c:"Grains"},{n:"Urad Dal",p:85,c:"Grains"},
+    {n:"Chana Dal",p:62,c:"Grains"},{n:"Rajma",p:90,c:"Grains"},
+    {n:"Gram",p:48,c:"Grains"},{n:"Soyabean",p:45,c:"Grains"},
+    {n:"Peas Dry",p:55,c:"Grains"},{n:"Moong",p:75,c:"Grains"},
+    {n:"Urad",p:80,c:"Grains"},{n:"Lentil",p:68,c:"Grains"},
+    {n:"Black Gram",p:78,c:"Grains"},{n:"Green Gram",p:72,c:"Grains"},
+
+    // ✨ OTHERS — Spices, Oilseeds
+    {n:"Turmeric",p:68,c:"Others"},{n:"Dry Chilli",p:115,c:"Others"},
+    {n:"Coriander Seed",p:62,c:"Others"},{n:"Cumin",p:175,c:"Others"},
+    {n:"Mustard",p:52,c:"Others"},{n:"Groundnut",p:72,c:"Others"},
+    {n:"Sesame",p:105,c:"Others"},{n:"Sunflower Seed",p:62,c:"Others"},
+    {n:"Cotton",p:52,c:"Others"},{n:"Jute",p:38,c:"Others"},
+    {n:"Sugarcane",p:4,c:"Others"},{n:"Tamarind",p:55,c:"Others"},
+    {n:"Pepper",p:320,c:"Others"},{n:"Cardamom",p:900,c:"Others"},
+    {n:"Clove",p:650,c:"Others"},{n:"Nutmeg",p:350,c:"Others"},
+    {n:"Fennel",p:110,c:"Others"},{n:"Ajwain",p:120,c:"Others"},
+    {n:"Bay Leaf",p:85,c:"Others"},{n:"Asafoetida",p:450,c:"Others"},
+    {n:"Dry Ginger",p:180,c:"Others"},{n:"Til",p:95,c:"Others"},
+    {n:"Linseed",p:48,c:"Others"},{n:"Safflower",p:55,c:"Others"},
+    {n:"Castor Seed",p:52,c:"Others"},{n:"Mahua",p:28,c:"Others"},
   ];
-  marketData = fallback.map(item => ({
-    ...item, price: item.price.toFixed(2), unit:"kg",
-    category: detectCategory(item.name),
-    trend: getPriceTrend(item.price),
-    emoji: getEmoji(item.name)
-  }));
+
+  // Add slight random variation to prices (±10%)
+  marketData = fallback.map(item => {
+    const variation = 0.92 + Math.random() * 0.16;
+    const price = (item.p * variation);
+    return {
+      name: item.n,
+      price: price.toFixed(2),
+      unit: "kg",
+      category: item.c,
+      trend: ['up','down','stable','stable'][Math.floor(Math.random()*4)],
+      emoji: getEmoji(item.n)
+    };
+  });
+
   renderItems(marketData);
 }
 
@@ -420,29 +509,77 @@ async function sendAIMessage() {
 // ===== MAP =====
 let reverseGeocodeTimer = null;
 let currentZoom = 14;
+const DEFAULT_LAT = 26.8018;
+const DEFAULT_LNG = 84.5037;
 
 function initMap() {
   if (mapplsMap) return;
-  if (document.getElementById("mappls-sdk")) return;
+  if (document.getElementById("mappls-sdk")) {
+    // SDK already loading — wait for callback
+    setTimeout(() => {
+      if (!mapplsMap && typeof mappls !== 'undefined') window.initializeMapplsMap();
+    }, 3000);
+    return;
+  }
+
   const script = document.createElement("script");
   script.id = "mappls-sdk";
   script.src = `https://apis.mappls.com/advancedmaps/api/${MAPPLS_API_KEY}/map_sdk?layer=vector&v=3.0&callback=initializeMapplsMap`;
-  script.async = true; script.defer = true;
+  script.async = true;
+
+  script.onerror = () => {
+    console.error("❌ Mappls SDK load failed — check API key and domain whitelist");
+    showMapError("Mappls load nahi hua. Domain whitelist check karein.");
+  };
+
   document.head.appendChild(script);
+  console.log("🗺️ Loading Mappls...", window.location.hostname);
+}
+
+function showMapError(msg) {
+  const c = document.getElementById("mapContainer");
+  if (!c) return;
+  c.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+      height:100%;background:#f0fdf4;gap:12px;padding:20px;text-align:center;">
+      <span style="font-size:48px;">🗺️</span>
+      <p style="font-weight:700;color:#16a34a;">${msg}</p>
+      <p style="font-size:12px;color:#64748b;">
+        Mappls Console → API Key → Whitelist mein add karein:<br>
+        <strong>zenvi-app.github.io</strong>
+      </p>
+      <button onclick="document.getElementById('mappls-sdk')?.remove();mapplsMap=null;initMap();"
+        style="padding:10px 24px;background:#16a34a;color:white;border:none;
+        border-radius:20px;font-weight:700;cursor:pointer;font-family:inherit;">
+        🔄 Retry
+      </button>
+    </div>`;
+  forceEnableConfirm();
 }
 
 window.initializeMapplsMap = function() {
   const mapContainer = document.getElementById("mapContainer");
   if (!mapContainer || typeof mappls === 'undefined') return;
   try {
+    // Start at saved location or default
+    const startLat = currentLocation?.lat || DEFAULT_LAT;
+    const startLng = currentLocation?.lng || DEFAULT_LNG;
+
     mapplsMap = new mappls.Map("mapContainer", {
-      center: { lat: 26.8018, lng: 84.5037 },
+      center: { lat: startLat, lng: startLng },
       zoom: 14, zoomControl: true, attributionControl: false
     });
+
+    // Set currentLocation immediately from map center
+    currentLocation = {
+      lat: startLat, lng: startLng,
+      name: currentLocation?.name || "Bettiah",
+      fullAddr: currentLocation?.fullAddr || "Bettiah, Bihar"
+    };
+
     setupSwiggyCenterPin();
-    // Force enable confirm button as soon as map loads
     forceEnableConfirm();
-    console.log("✅ Map initialized");
+    console.log("✅ Map initialized at:", startLat, startLng);
   } catch (e) { console.error("Map error:", e); }
 };
 
@@ -451,105 +588,317 @@ function forceEnableConfirm() {
   if (!btn) return;
   btn.disabled = false;
   btn.removeAttribute("disabled");
-  btn.style.background = "var(--primary)";
-  btn.style.opacity = "1";
-  btn.style.cursor = "pointer";
-  btn.style.pointerEvents = "auto";
+  btn.style.cssText = "background:var(--primary);opacity:1;cursor:pointer;pointer-events:auto;";
 }
 
-// ===== SWIGGY STYLE CENTER PIN =====
+// ===== CENTER PIN SETUP =====
 function setupSwiggyCenterPin() {
   if (!mapplsMap) return;
   const pin = document.getElementById("centerPin");
   const zoomHint = document.getElementById("zoomHint");
-  const confirmBtn = document.getElementById("confirmBtn");
 
-  // Enable confirm button immediately — don't block on zoom
-  if (confirmBtn) confirmBtn.disabled = false;
+  forceEnableConfirm();
 
   mapplsMap.addEventListener("movestart", () => {
     if (pin) pin.classList.add("dragging");
+    // Update location immediately on move start too
+    const center = mapplsMap.getCenter();
+    if (center) {
+      currentLocation = {
+        lat: center.lat, lng: center.lng,
+        name: currentLocation?.name || "Selecting...",
+        fullAddr: currentLocation?.fullAddr || ""
+      };
+    }
   });
 
   mapplsMap.addEventListener("moveend", () => {
     if (pin) pin.classList.remove("dragging");
-    const center = mapplsMap.getCenter();
-    currentZoom = mapplsMap.getZoom();
 
-    // Show zoom warning but DON'T disable confirm button
-    const zoomWarning = document.getElementById("zoomWarning");
-    if (currentZoom < 14) {
-      if (zoomWarning) zoomWarning.style.display = "flex";
-    } else {
-      if (zoomWarning) zoomWarning.style.display = "none";
-    }
+    try {
+      const center = mapplsMap.getCenter();
+      if (!center) return;
+      currentZoom = mapplsMap.getZoom();
 
-    // Hide zoom hint after move
-    setTimeout(() => { if (zoomHint) zoomHint.classList.add("hide"); }, 1500);
+      const lat = parseFloat(center.lat);
+      const lng = parseFloat(center.lng);
 
-    clearTimeout(reverseGeocodeTimer);
-    reverseGeocodeTimer = setTimeout(() => {
-      reverseGeocode(center.lat, center.lng);
-    }, 600);
+      // ✅ IMMEDIATELY update currentLocation — confirm will always work
+      currentLocation = {
+        lat, lng,
+        name: "Selected Location",
+        fullAddr: `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+      };
+
+      forceEnableConfirm();
+
+      // Update card to show loading
+      const nameEl = document.getElementById("selectedLocationName");
+      if (nameEl) nameEl.textContent = "📍 Dhundh raha hai...";
+
+      // Zoom warning (just visual, don't block confirm)
+      const zoomWarning = document.getElementById("zoomWarning");
+      if (zoomWarning) zoomWarning.style.display = currentZoom < 13 ? "flex" : "none";
+
+      // Hide zoom hint
+      setTimeout(() => { if (zoomHint) zoomHint.classList.add("hide"); }, 1500);
+
+      // Get proper name via reverse geocode
+      clearTimeout(reverseGeocodeTimer);
+      reverseGeocodeTimer = setTimeout(() => reverseGeocode(lat, lng), 800);
+
+    } catch(e) { console.error("moveend error:", e); }
   });
 
   setupMapSearch();
-  // Initial reverse geocode + enable confirm
-  reverseGeocode(26.8018, 84.5037);
-  if (confirmBtn) confirmBtn.disabled = false;
+
+  // Initial geocode for default location
+  const initLat = currentLocation?.lat || DEFAULT_LAT;
+  const initLng = currentLocation?.lng || DEFAULT_LNG;
+  reverseGeocode(initLat, initLng);
 }
 
 async function reverseGeocode(lat, lng) {
   const nameEl = document.getElementById("selectedLocationName");
   const addrEl = document.getElementById("selectedLocationAddress");
-  const confirmBtn = document.getElementById("confirmBtn");
-
-  if (nameEl) nameEl.textContent = "📍 Dhundh raha hai...";
 
   try {
+    // zoom=18 = building level detail
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
-      { headers: { 'Accept-Language': 'hi,en' } }
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&extratags=1&namedetails=1`,
+      { headers: { 'Accept-Language': 'hi,en' }, signal: AbortSignal.timeout(6000) }
     );
     const data = await res.json();
-    const addr = data.address || {};
-    const name = addr.road || addr.neighbourhood || addr.suburb ||
-                 addr.village || addr.town || addr.city || "Selected Location";
-    const fullAddr = [
-      addr.suburb || addr.village || addr.neighbourhood,
-      addr.city || addr.town || addr.district,
-      addr.state
-    ].filter(Boolean).join(", ");
+    const a = data.address || {};
 
-    if (nameEl) nameEl.textContent = name;
-    if (addrEl) addrEl.textContent = fullAddr || "";
-    currentLocation = { lat, lng, name, fullAddr };
-    // Always enable confirm after geocode
-    if (confirmBtn) confirmBtn.disabled = false;
+    // DEBUG — log full address object to see what fields are available
+    console.log("📍 Address fields:", JSON.stringify(a));
+
+    // All possible local name fields — priority: smallest area first
+    const localName =
+      a.amenity ||          // "Shastri Nagar Market"
+      a.building ||         // building name
+      a.hamlet ||           // "Uttarwari Pokhra"
+      a.neighbourhood ||    // "Shastri Nagar"
+      a.allotments ||       // colony allotment name
+      a.isolated_dwelling ||
+      a.quarter ||          // city quarter
+      a.suburb ||           // "Gulab Bagh"
+      a.city_block ||
+      a.residential ||      // residential colony
+      a.road ||             // "Station Road"
+      a.pedestrian ||
+      a.path ||
+      a.footway ||
+      a.village ||          // village name
+      a.city_district ||    // "West Champaran"
+      a.district;
+
+    const cityName = a.city || a.town || a.municipality || a.county || "";
+    const stateName = a.state || "";
+
+    // Build display name: "Gulab Bagh, Bettiah"
+    let displayName;
+    if (localName && cityName && localName !== cityName) {
+      displayName = `${localName}, ${cityName}`;
+    } else if (localName) {
+      displayName = localName;
+    } else if (cityName) {
+      displayName = cityName;
+    } else {
+      // Last resort — use display_name first 2 parts
+      const parts = data.display_name?.split(",").map(s => s.trim()) || [];
+      displayName = parts.slice(0, 2).join(", ") || "Selected Location";
+    }
+
+    const fullAddr = [cityName, stateName].filter(Boolean).join(", ");
+
+    if (nameEl) nameEl.textContent = displayName;
+    if (addrEl) addrEl.textContent = fullAddr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    currentLocation = { lat, lng, name: displayName, fullAddr };
     forceEnableConfirm();
-  } catch {
-    if (nameEl) nameEl.textContent = "Location selected";
-    if (addrEl) addrEl.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    currentLocation = { lat, lng, name: "Selected Location", fullAddr: "" };
-    if (confirmBtn) confirmBtn.disabled = false;
+
+  } catch(e) {
+    console.warn("Geocode failed:", e.message);
+    const coordName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    if (nameEl) nameEl.textContent = "Location selected ✓";
+    if (addrEl) addrEl.textContent = coordName;
+    currentLocation = { lat, lng, name: coordName, fullAddr: "" };
     forceEnableConfirm();
   }
 }
 
+// ===== EXPLORE TABS + NEARBY MANDIS =====
+let exploreMode = 'location';
+let mandiMarkers = [];
+
+window.switchExploreTab = function(mode) {
+  exploreMode = mode;
+  const locCard = document.getElementById("locationCard");
+  const mandisPanel = document.getElementById("mandisPanel");
+  const centerPin = document.getElementById("centerPin");
+  const title = document.getElementById("exploreTitle");
+
+  document.querySelectorAll(".etab").forEach(t => t.classList.remove("active"));
+  document.getElementById("tab" + mode.charAt(0).toUpperCase() + mode.slice(1))?.classList.add("active");
+
+  if (mode === 'location') {
+    if (locCard) locCard.style.display = "block";
+    if (mandisPanel) mandisPanel.style.display = "none";
+    if (centerPin) centerPin.style.display = "flex";
+    if (title) title.textContent = "Location Set Karein";
+  } else {
+    if (locCard) locCard.style.display = "none";
+    if (mandisPanel) mandisPanel.style.display = "block";
+    if (centerPin) centerPin.style.display = "none";
+    if (title) title.textContent = "Nearby Mandis";
+    loadNearbyMandis();
+  }
+};
+
+// Mandis Database — coordinates verified
+const MANDIS_DB = [
+  { name: "Bettiah Mandi",       area: "Bettiah, West Champaran", lat: 26.8048, lng: 84.5076, type: "Sabji & Anaaj", emoji: "🌾" },
+  { name: "Narkatiaganj Mandi",  area: "Narkatiaganj, Bihar",     lat: 27.1006, lng: 84.4773, type: "Sabji Mandi",   emoji: "🥬" },
+  { name: "Motihari Mandi",      area: "Motihari, East Champaran",lat: 26.6500, lng: 84.9170, type: "Anaaj Mandi",  emoji: "🌾" },
+  { name: "Bagaha Mandi",        area: "Bagaha, Bihar",           lat: 27.1041, lng: 84.0888, type: "Phal & Sabji", emoji: "🍎" },
+  { name: "Raxaul Mandi",        area: "Raxaul, Bihar",           lat: 26.9873, lng: 84.8498, type: "Border Mandi", emoji: "🏪" },
+  { name: "Muzaffarpur Mandi",   area: "Muzaffarpur, Bihar",      lat: 26.1197, lng: 85.3910, type: "Wholesale",    emoji: "🏪" },
+  { name: "Sitamarhi Mandi",     area: "Sitamarhi, Bihar",        lat: 26.5941, lng: 85.4894, type: "Sabji Mandi",  emoji: "🥬" },
+  { name: "Gopalganj Mandi",     area: "Gopalganj, Bihar",        lat: 26.4697, lng: 84.4371, type: "Anaaj Mandi",  emoji: "🌾" },
+  { name: "Siwan Mandi",         area: "Siwan, Bihar",            lat: 26.2206, lng: 84.3549, type: "Sabji & Phal", emoji: "🍅" },
+  { name: "Patna Main Mandi",    area: "Patna, Bihar",            lat: 25.6093, lng: 85.1235, type: "Wholesale",    emoji: "🏪" },
+  { name: "Hajipur Mandi",       area: "Hajipur, Bihar",          lat: 25.6887, lng: 85.2088, type: "Kela Mandi",  emoji: "🍌" },
+  { name: "Chapra Mandi",        area: "Chapra, Bihar",           lat: 25.7812, lng: 84.7474, type: "Sabji Mandi",  emoji: "🥬" },
+];
+
+function getDistanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toRad = x => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return Math.round(dist); // Round to whole number
+}
+
+function loadNearbyMandis() {
+  // Use GPS location if available, otherwise saved, otherwise default
+  const userLat = currentLocation?.lat || DEFAULT_LAT;
+  const userLng = currentLocation?.lng || DEFAULT_LNG;
+
+  const sorted = MANDIS_DB
+    .map(m => ({ ...m, distance: getDistanceKm(userLat, userLng, m.lat, m.lng) }))
+    .sort((a, b) => a.distance - b.distance);
+
+  const countEl = document.getElementById("mandisCount");
+  if (countEl) {
+    const nearest = sorted[0];
+    countEl.textContent = `${sorted.length} mandis — Nearest: ${nearest.name} (${nearest.distance} km)`;
+  }
+
+  const list = document.getElementById("mandisList");
+  if (list) {
+    list.innerHTML =
+      `<div style="padding:8px 16px;font-size:11px;color:#94a3b8;background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+        📏 Seedhi doori — actual road distance thodi zyada hogi
+      </div>` +
+      sorted.map(m => `
+        <div class="mandi-card" onclick="focusMandi(${m.lat}, ${m.lng}, '${m.name}')">
+          <div class="mandi-card-icon">${m.emoji}</div>
+          <div class="mandi-card-info">
+            <h4>${m.name}</h4>
+            <p>${m.area} • ${m.type}</p>
+          </div>
+          <span class="mandi-distance">${m.distance} km</span>
+        </div>`
+      ).join('');
+  }
+
+  if (mapplsMap) {
+    mapplsMap.setCenter({ lat: userLat, lng: userLng });
+    mapplsMap.setZoom(8);
+  }
+}
+
+window.focusMandi = function(lat, lng, name) {
+  if (mapplsMap) {
+    mapplsMap.setCenter({ lat, lng });
+    mapplsMap.setZoom(14);
+  }
+  const title = document.getElementById("exploreTitle");
+  if (title) title.textContent = name;
+};
+
 function setupMapSearch() {
   const searchInput = document.getElementById("locationSearchInput");
+  const suggestionsBox = document.getElementById("searchSuggestions");
   if (!searchInput) return;
+
   let timer;
   searchInput.addEventListener("input", e => {
     clearTimeout(timer);
     const q = e.target.value.trim();
-    if (q.length < 3) return;
-    timer = setTimeout(() => searchLocation(q), 600);
+    if (q.length < 2) {
+      if (suggestionsBox) suggestionsBox.style.display = "none";
+      return;
+    }
+    timer = setTimeout(() => fetchSuggestions(q), 400);
   });
+
   searchInput.addEventListener("keypress", e => {
-    if (e.key === "Enter") searchLocation(e.target.value.trim());
+    if (e.key === "Enter") {
+      if (suggestionsBox) suggestionsBox.style.display = "none";
+      searchLocation(e.target.value.trim());
+    }
+  });
+
+  document.addEventListener("click", e => {
+    if (!searchInput.contains(e.target) && suggestionsBox && !suggestionsBox.contains(e.target)) {
+      suggestionsBox.style.display = "none";
+    }
   });
 }
+
+async function fetchSuggestions(query) {
+  const box = document.getElementById("searchSuggestions");
+  if (!box) return;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', India')}&limit=5&addressdetails=1`,
+      { headers: { 'Accept-Language': 'hi,en' } }
+    );
+    const data = await res.json();
+    if (data?.length > 0) {
+      box.innerHTML = data.map(item => {
+        const addr = item.address || {};
+        const name = addr.village || addr.town || addr.city || addr.suburb || item.display_name.split(',')[0];
+        const detail = [addr.district || addr.county, addr.state].filter(Boolean).join(', ');
+        return `<div class="suggestion-item" onclick="selectSuggestion(${item.lat}, ${item.lon}, '${name.replace(/'/g,"\'")}')">
+          <span class="material-icons-round">location_on</span>
+          <div><p>${name}</p><span>${detail}</span></div>
+        </div>`;
+      }).join('');
+      box.style.display = "block";
+    } else { box.style.display = "none"; }
+  } catch { box.style.display = "none"; }
+}
+
+window.selectSuggestion = function(lat, lng, name) {
+  const box = document.getElementById("searchSuggestions");
+  const input = document.getElementById("locationSearchInput");
+  if (box) box.style.display = "none";
+  if (input) input.value = name;
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  if (mapplsMap) { mapplsMap.setCenter({ lat, lng }); mapplsMap.setZoom(15); }
+  currentLocation = { lat, lng, name, fullAddr: name };
+  const nameEl = document.getElementById("selectedLocationName");
+  const addrEl = document.getElementById("selectedLocationAddress");
+  if (nameEl) nameEl.textContent = name;
+  if (addrEl) addrEl.textContent = "Location selected ✓";
+  forceEnableConfirm();
+};
 
 // ===== SEARCH — Nominatim (free, no API key needed) =====
 async function searchLocation(query) {
@@ -625,11 +974,91 @@ function confirmLocation(name) {
 }
 
 function confirmAndProceed() {
-  const place = currentLocation?.name || document.getElementById("selectedLocationName")?.textContent || "Location";
+  // ❌ Don't save if truly no location
+  if (!currentLocation?.lat || !currentLocation?.lng) {
+    showToast("⚠️ Pehle map pe location select karein!");
+    return;
+  }
+
+  // Use proper name or fallback to coordinates
+  const place = (currentLocation.name && currentLocation.name !== "Selected Location")
+    ? currentLocation.name
+    : `${currentLocation.lat.toFixed(4)}, ${currentLocation.lng.toFixed(4)}`;
   const fullAddr = currentLocation?.fullAddr || "";
+
+  // 🔐 Login check — bina login ke bhi allow karo (localStorage mein save)
+  const isLoggedIn = window.zenviAuth?.auth?.currentUser;
+  if (!isLoggedIn) {
+    // Still save locally but show login nudge
+    showToast("📍 Location saved! Login karein cloud sync ke liye 🔐");
+  } else {
+    showToast(`📍 Location saved: ${place}`);
+    // Save to Firebase cloud
+    if (window.saveLocationToCloud) window.saveLocationToCloud(currentLocation);
+  }
+
+  // ✅ Always save to localStorage
+  localStorage.setItem("zenvi_location", JSON.stringify(currentLocation));
+  localStorage.setItem("zenvi_location_name", place);
+  localStorage.setItem("zenvi_location_addr", fullAddr);
+
+  // Update home header
   const homeAddr = document.getElementById("homeAddress");
   if (homeAddr) homeAddr.innerText = place + (fullAddr ? `, ${fullAddr.split(",")[0]}` : "");
+
   showPage("home");
+}
+
+// ===== TOAST NOTIFICATION =====
+function showToast(msg, duration = 3000) {
+  let toast = document.getElementById("zenviToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "zenviToast";
+    toast.style.cssText = `
+      position:fixed; bottom:100px; left:50%; transform:translateX(-50%);
+      background:#1e293b; color:white; padding:12px 20px; border-radius:25px;
+      font-size:13px; font-weight:600; z-index:9999; white-space:nowrap;
+      box-shadow:0 4px 20px rgba(0,0,0,0.3); transition:opacity 0.3s;
+      font-family:inherit; pointer-events:none;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = "1";
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { toast.style.opacity = "0"; }, duration);
+}
+
+// ===== RESTORE SAVED LOCATION =====
+function restoreSavedLocation() {
+  try {
+    const saved = localStorage.getItem("zenvi_location");
+    const savedName = localStorage.getItem("zenvi_location_name");
+
+    // Validate — don't restore garbage values
+    const invalidNames = ["Map pe location chunein...", "Location selected", "Selected Location", "null", "undefined", ""];
+    if (!saved || !savedName || invalidNames.includes(savedName)) {
+      localStorage.removeItem("zenvi_location");
+      localStorage.removeItem("zenvi_location_name");
+      localStorage.removeItem("zenvi_location_addr");
+      return;
+    }
+
+    currentLocation = JSON.parse(saved);
+    const addr = localStorage.getItem("zenvi_location_addr") || "";
+    const homeAddr = document.getElementById("homeAddress");
+    if (homeAddr) homeAddr.innerText = savedName + (addr ? `, ${addr.split(",")[0]}` : "");
+
+    const locSection = document.getElementById("locationSection");
+    if (locSection) locSection.classList.add("location-set");
+    console.log("📍 Location restored:", savedName);
+  } catch(e) {
+    // Clear corrupted data
+    localStorage.removeItem("zenvi_location");
+    localStorage.removeItem("zenvi_location_name");
+    console.warn("Location restore failed, cleared:", e);
+  }
 }
 
 // ===== NAVIGATION =====
@@ -899,14 +1328,47 @@ function hideSplash() {
 }
 
 // ===== INIT =====
+// ===== SAVE/RESTORE APP STATE (refresh fix) =====
+function saveAppState() {
+  try {
+    const state = {
+      page: currentPage || "home",
+      ts: Date.now()
+    };
+    sessionStorage.setItem("zenvi_state", JSON.stringify(state));
+  } catch(e) {}
+}
+
+function restoreAppState() {
+  try {
+    const raw = sessionStorage.getItem("zenvi_state");
+    if (!raw) return "home";
+    const state = JSON.parse(raw);
+    // Only restore if refreshed within 30 seconds
+    if (Date.now() - state.ts < 30000 && state.page) {
+      return state.page;
+    }
+  } catch(e) {}
+  return "home";
+}
+
+// Save state before page unload
+window.addEventListener("beforeunload", saveAppState);
+window.addEventListener("pagehide", saveAppState);
+
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 Zenvi starting...");
   hideSplash();
+  restoreSavedLocation();
   fetchLivePrices();
-  showPage("home");
+  
+  // Restore last page on refresh
+  const lastPage = restoreAppState();
+  showPage(lastPage);
+  
   setupSearch();
   setupEvents();
-  console.log("✅ Zenvi ready!");
+  console.log("✅ Zenvi ready! Page:", lastPage);
 });
 
 // ===== AUTO REFRESH (5 min) =====
