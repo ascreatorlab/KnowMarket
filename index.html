@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Zenvi - Live Mandi Prices</title>
   <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <meta name="theme-color" content="#16a34a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -176,175 +178,185 @@
 <div id="profilePage" class="page">
   <div class="profile-scroll">
 
-  <!-- Hero Banner -->
-  <div class="profile-hero">
-    <div class="profile-avatar-wrap">
-      <div class="profile-avatar-circle" id="profileAvatarCircle">
-        <span class="material-icons-round" id="profileAvatarIcon">account_circle</span>
-        <img id="profileAvatarImg" src="" alt="" style="display:none;">
-      </div>
-      <div class="profile-online-dot" id="profileOnlineDot" style="display:none;"></div>
+  <!-- TOP HEADER with back + menu -->
+  <div class="zp-header">
+    <div class="zp-back" onclick="showPage('home')">
+      <span class="material-icons-round">arrow_back</span>
     </div>
-    <h2 class="profile-name" id="profileDisplayName">Guest User</h2>
-    <p class="profile-email-top" id="profileEmailTop">Login karein apna account access karne ke liye</p>
-    <div class="profile-location-tag" id="profileLocationTag" style="display:none;">
-      <span class="material-icons-round">location_on</span>
-      <span id="profileLocationText">Location set karein</span>
+    <span class="zp-title">Account</span>
+    <div class="zp-menu-btn" id="profileMenuBtn">
+      <span class="material-icons-round">more_vert</span>
+    </div>
+    <!-- Dropdown menu -->
+    <div class="zp-dropdown" id="profileDropdown" style="display:none;">
+      <div class="zp-dropdown-item" onclick="showPage('home')">
+        <span class="material-icons-round">home</span> Home
+      </div>
+      <div class="zp-dropdown-item" id="clearChatBtn">
+        <span class="material-icons-round">chat</span> Clear Chat History
+      </div>
+      <div class="zp-dropdown-item logout-item" id="logoutBtn">
+        <span class="material-icons-round">logout</span> Log out
+      </div>
     </div>
   </div>
 
-  <!-- LOGIN CARD (logged out) -->
-  <div id="loginCard" class="profile-card">
-    <div class="login-benefits">
-      <div class="benefit-item"><span>🔔</span><p>Price Alerts</p></div>
-      <div class="benefit-item"><span>⭐</span><p>Favourites</p></div>
-      <div class="benefit-item"><span>📊</span><p>Market Watch</p></div>
+  <!-- USER CARD -->
+  <div class="zp-user-card">
+    <div class="zp-avatar" id="profileAvatarCircle">
+      <span class="material-icons-round" id="profileAvatarIcon" style="font-size:42px;color:#16a34a;">account_circle</span>
+      <img id="profileAvatarImg" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">
     </div>
-    <button id="googleLoginBtn" class="google-login-btn">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" width="20">
+    <div class="zp-user-info">
+      <h2 id="profileDisplayName">Guest User</h2>
+      <p id="profileEmailTop">Login karein account access karne ke liye</p>
+    </div>
+    <div class="zp-edit-btn" id="editProfileBtn">
+      <span style="font-size:13px;font-weight:700;color:#16a34a;">Edit</span>
+      <span class="material-icons-round" style="font-size:16px;color:#16a34a;">chevron_right</span>
+    </div>
+  </div>
+
+  <!-- LOGIN BUTTON (guest) -->
+  <div id="loginCard" class="zp-login-card">
+    <div class="zp-login-benefits">
+      <div class="zp-benefit"><span>🔔</span><p>Price Alerts</p></div>
+      <div class="zp-benefit"><span>⭐</span><p>Favourites</p></div>
+      <div class="zp-benefit"><span>📊</span><p>Market Watch</p></div>
+      <div class="zp-benefit"><span>☁️</span><p>Cloud Sync</p></div>
+    </div>
+    <button id="googleLoginBtn" class="zp-google-btn">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="G" width="18">
       Google se Login Karein
     </button>
   </div>
 
-  <!-- LOGGED IN SECTIONS -->
+  <!-- LOGGED IN CONTENT -->
   <div id="profileDetails" class="hidden">
 
-    <!-- Stats -->
-    <div class="profile-stats">
-      <div class="pstat"><span class="pstat-num" id="statSearches">0</span><span class="pstat-label">Searches</span></div>
-      <div class="pstat-divider"></div>
-      <div class="pstat"><span class="pstat-num" id="statFavourites">0</span><span class="pstat-label">Favourites</span></div>
-      <div class="pstat-divider"></div>
-      <div class="pstat"><span class="pstat-num" id="statAlerts">0</span><span class="pstat-label">Alerts</span></div>
+    <!-- Quick Actions Row -->
+    <div class="zp-quick-row">
+      <div class="zp-quick-item" onclick="showPage('explore')">
+        <span class="material-icons-round">location_on</span>
+        <p id="savedLocName">Set Location</p>
+      </div>
+      <div class="zp-quick-item" id="favQuickBtn">
+        <span class="material-icons-round">favorite</span>
+        <p>Favourites</p>
+      </div>
+      <div class="zp-quick-item" id="alertQuickBtn">
+        <span class="material-icons-round">notifications</span>
+        <p>Alerts</p>
+      </div>
+      <div class="zp-quick-item">
+        <span class="material-icons-round">trending_up</span>
+        <p id="mwChanges">Trends</p>
+      </div>
     </div>
 
-    <!-- Saved Location -->
-    <div class="profile-section-title">📍 Saved Location</div>
-    <div class="profile-card p0">
-      <div class="location-info-row" id="savedLocationRow">
-        <div class="loc-icon-box"><span class="material-icons-round">location_on</span></div>
-        <div class="loc-info-text">
-          <p id="savedLocName">Location set nahi hai</p>
-          <span id="savedLocAddr">Explore tab se set karein</span>
+    <!-- MY ZENVI section -->
+    <div class="zp-section-label">MY ZENVI</div>
+    <div class="zp-menu-group">
+      <div class="zp-menu-row" onclick="showPage('explore')">
+        <span class="material-icons-round zp-row-icon green">location_on</span>
+        <div class="zp-row-text">
+          <p>Saved Address</p>
+          <span id="savedLocAddr">Set karna hai</span>
         </div>
-        <button class="change-loc-btn" onclick="showPage('explore')">Change</button>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
       </div>
-    </div>
-
-    <!-- Favourite Items -->
-    <div class="profile-section-title">⭐ Favourite Items</div>
-    <div class="profile-card">
-      <div id="favouritesList" class="favourites-list">
-        <p class="empty-state">Koi favourite item nahi hai.<br>Home page pe item card pe tap karein.</p>
-      </div>
-    </div>
-
-    <!-- Price Alerts -->
-    <div class="profile-section-title">🔔 Price Alerts</div>
-    <div class="profile-card">
-      <div id="alertsList" class="alerts-list">
-        <p class="empty-state">Koi alert set nahi hai.<br>Item card pe "Alert" button se set karein.</p>
-      </div>
-      <button class="add-alert-btn" id="addAlertBtn">
-        <span class="material-icons-round">add_alert</span> Naya Alert Add Karein
-      </button>
-    </div>
-
-    <!-- Market Watch -->
-    <div class="profile-section-title">📊 My Market Watch</div>
-    <div class="profile-card market-watch-card">
-      <div class="mw-row"><span class="material-icons-round">visibility</span><p>Items watched</p><strong id="mwItems">0</strong></div>
-      <div class="mw-row"><span class="material-icons-round">schedule</span><p>Last checked</p><strong id="mwTime">--</strong></div>
-      <div class="mw-row"><span class="material-icons-round">trending_up</span><p>Price changes today</p><strong id="mwChanges">--</strong></div>
-    </div>
-
-    <!-- Farmer/Shop Mode -->
-    <div class="profile-section-title">🏪 Seller Mode</div>
-    <div class="profile-card seller-card">
-      <div class="seller-options">
-        <div class="seller-opt">
-          <span>🌾</span>
-          <p>Apni fasal list karein</p>
-          <span class="coming-tag">Soon</span>
+      <div class="zp-menu-row" id="showFavourites">
+        <span class="material-icons-round zp-row-icon red">favorite</span>
+        <div class="zp-row-text">
+          <p>Favourite Items</p>
+          <span id="favCount">0 items saved</span>
         </div>
-        <div class="seller-opt">
-          <span>🏪</span>
-          <p>Apni dukaan register karein</p>
-          <span class="coming-tag">Soon</span>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
+      </div>
+      <div class="zp-menu-row" id="showAlerts">
+        <span class="material-icons-round zp-row-icon orange">notifications_active</span>
+        <div class="zp-row-text">
+          <p>Price Alerts</p>
+          <span id="alertCount">0 alerts set</span>
         </div>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
+      </div>
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon blue">bar_chart</span>
+        <div class="zp-row-text">
+          <p>Market Watch</p>
+          <span id="mwItems">0 items tracked</span>
+        </div>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
       </div>
     </div>
 
-    <!-- Settings -->
-    <div class="profile-section-title">⚙️ Settings</div>
-    <div class="profile-menu">
-      <div class="menu-item" id="langToggle">
-        <div class="menu-icon blue"><span class="material-icons-round">language</span></div>
-        <div class="menu-text"><p>Language</p><span id="currentLang">Hindi / English</span></div>
-        <span class="material-icons-round menu-arrow">chevron_right</span>
+    <!-- SELLER MODE -->
+    <div class="zp-section-label">SELLER MODE</div>
+    <div class="zp-menu-group">
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon green">agriculture</span>
+        <div class="zp-row-text"><p>List Your Crop</p><span>Apni fasal directly sell karein</span></div>
+        <span class="zp-coming-chip">Soon</span>
       </div>
-      <div class="menu-item" id="darkModeToggle">
-        <div class="menu-icon purple"><span class="material-icons-round">dark_mode</span></div>
-        <div class="menu-text"><p>Dark Mode</p><span>Off</span></div>
-        <label class="toggle-switch">
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon orange">store</span>
+        <div class="zp-row-text"><p>Register Your Shop</p><span>Apni dukaan add karein</span></div>
+        <span class="zp-coming-chip">Soon</span>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="zp-section-label">SETTINGS</div>
+    <div class="zp-menu-group">
+      <div class="zp-menu-row" id="darkModeToggle">
+        <span class="material-icons-round zp-row-icon purple">dark_mode</span>
+        <div class="zp-row-text"><p>Dark Mode</p><span>Appearance</span></div>
+        <label class="toggle-switch" onclick="event.stopPropagation()">
           <input type="checkbox" id="darkModeCheck">
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="menu-item" id="notifToggle">
-        <div class="menu-icon green"><span class="material-icons-round">notifications</span></div>
-        <div class="menu-text"><p>Notifications</p><span>On</span></div>
-        <label class="toggle-switch">
+      <div class="zp-menu-row" id="notifToggle">
+        <span class="material-icons-round zp-row-icon green">notifications</span>
+        <div class="zp-row-text"><p>Notifications</p><span>Price updates</span></div>
+        <label class="toggle-switch" onclick="event.stopPropagation()">
           <input type="checkbox" id="notifCheck" checked>
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="menu-item" id="clearChatBtn">
-        <div class="menu-icon orange"><span class="material-icons-round">chat</span></div>
-        <div class="menu-text"><p>Chat History Clear Karein</p><span>AI chat reset hoga</span></div>
-        <span class="material-icons-round menu-arrow">chevron_right</span>
+    </div>
+
+    <!-- ABOUT ZENVI -->
+    <div class="zp-section-label">ABOUT ZENVI</div>
+    <div class="zp-menu-group">
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon green">info</span>
+        <div class="zp-row-text"><p>About Zenvi</p><span>India ka smart mandi app</span></div>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
+      </div>
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon blue">support_agent</span>
+        <div class="zp-row-text"><p>Help & Support</p><span>Contact us</span></div>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
+      </div>
+      <div class="zp-menu-row">
+        <span class="material-icons-round zp-row-icon purple">privacy_tip</span>
+        <div class="zp-row-text"><p>Privacy Policy</p><span>Aapka data safe hai</span></div>
+        <span class="material-icons-round zp-row-arrow">chevron_right</span>
       </div>
     </div>
 
-    <!-- Account Info -->
-    <div class="profile-section-title">👤 Account Info</div>
-    <div class="profile-card">
-      <div class="info-row"><span class="material-icons-round">email</span><span id="userEmail">--</span></div>
-      <div class="info-row"><span class="material-icons-round">verified_user</span><span>Google Account • Verified</span></div>
-      <div class="info-row"><span class="material-icons-round">calendar_today</span><span id="joinDate">--</span></div>
+    <!-- Account info small -->
+    <div class="zp-account-info">
+      <p id="userEmail" style="font-size:12px;color:#94a3b8;"></p>
+      <p id="joinDate" style="font-size:12px;color:#94a3b8;margin-top:2px;"></p>
     </div>
-
-    <!-- About -->
-    <div class="profile-section-title">ℹ️ About Zenvi</div>
-    <div class="profile-menu">
-      <div class="menu-item">
-        <div class="menu-icon green"><span class="material-icons-round">info</span></div>
-        <div class="menu-text"><p>About Zenvi</p><span>India ka smart mandi app</span></div>
-        <span class="material-icons-round menu-arrow">chevron_right</span>
-      </div>
-      <div class="menu-item">
-        <div class="menu-icon blue"><span class="material-icons-round">support_agent</span></div>
-        <div class="menu-text"><p>Contact Support</p><span>Help chahiye?</span></div>
-        <span class="material-icons-round menu-arrow">chevron_right</span>
-      </div>
-      <div class="menu-item">
-        <div class="menu-icon purple"><span class="material-icons-round">privacy_tip</span></div>
-        <div class="menu-text"><p>Privacy Policy</p><span>Aapka data safe hai</span></div>
-        <span class="material-icons-round menu-arrow">chevron_right</span>
-      </div>
-    </div>
-
-    <!-- Logout -->
-    <button id="logoutBtn" class="logout-btn-new">
-      <span class="material-icons-round">logout</span> Logout
-    </button>
 
   </div><!-- end profileDetails -->
 
-  <!-- App Version -->
   <p class="app-version">Zenvi v1.0 • Made with ❤️ in India 🇮🇳</p>
-
-  </div><!-- end profile-scroll -->
+  </div>
 </div>
 
 <!-- ========== BOTTOM NAV ========== -->
