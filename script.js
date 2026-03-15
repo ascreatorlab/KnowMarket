@@ -697,21 +697,29 @@ async function reverseGeocode(lat, lng) {
     const cityName = a.city || a.town || a.municipality || a.county || "";
     const stateName = a.state || "";
 
-    // Build display name: "Gulab Bagh, Bettiah"
+    // Build display name: "Gulab Bagh, Bettiah" not "Bettiah, Bettiah"
     let displayName;
-    if (localName && cityName && localName !== cityName) {
-      displayName = `${localName}, ${cityName}`;
-    } else if (localName) {
-      displayName = localName;
-    } else if (cityName) {
-      displayName = cityName;
+
+    // Clean: remove duplicates
+    const cleanLocal = localName?.trim();
+    const cleanCity  = cityName?.trim();
+
+    if (cleanLocal && cleanCity && cleanLocal.toLowerCase() !== cleanCity.toLowerCase()) {
+      displayName = `${cleanLocal}, ${cleanCity}`;
+    } else if (cleanLocal) {
+      displayName = cleanLocal;
+    } else if (cleanCity) {
+      // No local name — try display_name parts for more detail
+      const parts = (data.display_name || "").split(",").map(s => s.trim()).filter(Boolean);
+      // Skip parts that are just numbers or match state/country
+      const filtered = parts.filter(p => p !== cleanCity && p !== stateName && p !== "India" && !/^\d/.test(p));
+      displayName = filtered.length > 0 ? `${filtered[0]}, ${cleanCity}` : cleanCity;
     } else {
-      // Last resort — use display_name first 2 parts
       const parts = data.display_name?.split(",").map(s => s.trim()) || [];
       displayName = parts.slice(0, 2).join(", ") || "Selected Location";
     }
 
-    const fullAddr = [cityName, stateName].filter(Boolean).join(", ");
+    const fullAddr = [cleanCity, stateName].filter(Boolean).join(", ");
 
     if (nameEl) nameEl.textContent = displayName;
     if (addrEl) addrEl.textContent = fullAddr || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
@@ -864,39 +872,54 @@ function setupMapSearch() {
 async function fetchSuggestions(query) {
   const box = document.getElementById("searchSuggestions");
   if (!box) return;
+
+  // Show loading
+  box.innerHTML = `<div class="suggestion-item"><span class="material-icons-round">hourglass_empty</span><div><p>Dhundh raha hai...</p></div></div>`;
+  box.style.display = "block";
+
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', India')}&limit=5&addressdetails=1`,
-      { headers: { 'Accept-Language': 'hi,en' } }
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=6&addressdetails=1`,
+      { headers: { 'Accept-Language': 'hi,en' }, signal: AbortSignal.timeout(6000) }
     );
     const data = await res.json();
     if (data?.length > 0) {
       box.innerHTML = data.map(item => {
-        const addr = item.address || {};
-        const name = addr.village || addr.town || addr.city || addr.suburb || item.display_name.split(',')[0];
-        const detail = [addr.district || addr.county, addr.state].filter(Boolean).join(', ');
-        return `<div class="suggestion-item" onclick="selectSuggestion(${item.lat}, ${item.lon}, '${name.replace(/'/g,"\'")}')">
+        const a = item.address || {};
+        // Show most local name
+        const name = a.hamlet || a.neighbourhood || a.suburb || a.village ||
+                     a.town || a.city || item.display_name.split(',')[0];
+        const city = a.city || a.town || a.district || "";
+        const state = a.state || "";
+        const detail = [city !== name ? city : "", state].filter(Boolean).join(", ");
+        const safeName = name.replace(/'/g, "\'").replace(/"/g, '');
+        return `<div class="suggestion-item" onclick="selectSuggestion(${item.lat}, ${item.lon}, '${safeName}', '${detail.replace(/'/g,"\'")}')">
           <span class="material-icons-round">location_on</span>
           <div><p>${name}</p><span>${detail}</span></div>
         </div>`;
       }).join('');
       box.style.display = "block";
-    } else { box.style.display = "none"; }
-  } catch { box.style.display = "none"; }
+    } else {
+      box.innerHTML = `<div class="suggestion-item"><span class="material-icons-round">search_off</span><div><p>Koi result nahi mila</p><span>Dusra naam try karein</span></div></div>`;
+    }
+  } catch(e) {
+    console.warn("Suggestions failed:", e.message);
+    box.innerHTML = `<div class="suggestion-item"><span class="material-icons-round">wifi_off</span><div><p>Internet check karein</p></div></div>`;
+  }
 }
 
-window.selectSuggestion = function(lat, lng, name) {
+window.selectSuggestion = function(lat, lng, name, fullAddr) {
   const box = document.getElementById("searchSuggestions");
   const input = document.getElementById("locationSearchInput");
   if (box) box.style.display = "none";
   if (input) input.value = name;
   lat = parseFloat(lat); lng = parseFloat(lng);
-  if (mapplsMap) { mapplsMap.setCenter({ lat, lng }); mapplsMap.setZoom(15); }
-  currentLocation = { lat, lng, name, fullAddr: name };
+  if (mapplsMap) { mapplsMap.setCenter({ lat, lng }); mapplsMap.setZoom(16); }
+  currentLocation = { lat, lng, name, fullAddr: fullAddr || name };
   const nameEl = document.getElementById("selectedLocationName");
   const addrEl = document.getElementById("selectedLocationAddress");
   if (nameEl) nameEl.textContent = name;
-  if (addrEl) addrEl.textContent = "Location selected ✓";
+  if (addrEl) addrEl.textContent = fullAddr || "";
   forceEnableConfirm();
 };
 
