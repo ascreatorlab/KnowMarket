@@ -1237,7 +1237,9 @@ function restoreSavedLocation() {
 
     // Validate — don't restore garbage values
     const invalidNames = ["Map pe location chunein...", "Location selected", "Selected Location", "null", "undefined", ""];
-    if (!saved || !savedName || invalidNames.includes(savedName)) {
+    // Reject coordinate-format names like "26.8018, 84.5037"
+    const isCoordinate = savedName && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(savedName.trim());
+    if (!saved || !savedName || invalidNames.includes(savedName) || isCoordinate) {
       localStorage.removeItem("zenvi_location");
       localStorage.removeItem("zenvi_location_name");
       localStorage.removeItem("zenvi_location_addr");
@@ -1535,7 +1537,7 @@ function updateSavedLocation() {
 
 // Dark mode toggle
 function setupProfileSettings() {
-  // Dropdown toggle
+  // ===== 3-dot Dropdown =====
   document.getElementById("profileMenuBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     const dd = document.getElementById("profileDropdown");
@@ -1546,18 +1548,98 @@ function setupProfileSettings() {
     if (dd) dd.style.display = "none";
   });
 
+  // ===== Dark Mode =====
   document.getElementById("darkModeCheck")?.addEventListener("change", e => {
     document.body.classList.toggle("dark-mode", e.target.checked);
+    localStorage.setItem("zenvi_dark", e.target.checked ? "1" : "0");
+    showToast(e.target.checked ? "🌙 Dark mode on" : "☀️ Light mode on");
+  });
+  // Restore dark mode on load
+  if (localStorage.getItem("zenvi_dark") === "1") {
+    document.body.classList.add("dark-mode");
+    const check = document.getElementById("darkModeCheck");
+    if (check) check.checked = true;
+  }
+
+  // ===== Notifications Toggle =====
+  document.getElementById("notifCheck")?.addEventListener("change", e => {
+    localStorage.setItem("zenvi_notif", e.target.checked ? "1" : "0");
+    showToast(e.target.checked ? "🔔 Notifications on" : "🔕 Notifications off");
   });
 
+  // ===== Clear Chat =====
   document.getElementById("clearChatBtn")?.addEventListener("click", () => {
-    const dd = document.getElementById("profileDropdown");
-    if (dd) dd.style.display = "none";
+    document.getElementById("profileDropdown").style.display = "none";
     if (confirm("Chat history clear karein?")) {
       chatHistory = [];
       const chatBody = document.getElementById("chatBody");
-      if (chatBody) chatBody.innerHTML = `<div class="ai-msg-wrap"><div class="ai-bubble">🙏 <strong>Namaste!</strong> Chat history clear ho gayi. Kuch bhi poochein!</div></div>`;
+      if (chatBody) chatBody.innerHTML = `<div class="ai-msg-wrap"><div class="ai-bubble">🙏 <strong>Namaste!</strong> Chat history clear ho gayi.</div></div>`;
       showToast("✅ Chat history cleared!");
+    }
+  });
+
+  // ===== Saved Address (quick row) =====
+  document.getElementById("favQuickBtn")?.addEventListener("click", () => {
+    showToast("⭐ " + (favourites.length > 0 ? `${favourites.length} favourite items` : "Koi favourite nahi hai"));
+  });
+  document.getElementById("alertQuickBtn")?.addEventListener("click", () => {
+    showToast("🔔 " + (priceAlerts.length > 0 ? `${priceAlerts.length} alerts set hain` : "Koi alert nahi hai"));
+  });
+
+  // ===== Favourites row =====
+  document.getElementById("showFavourites")?.addEventListener("click", () => {
+    const list = favourites;
+    if (list.length === 0) {
+      showToast("⭐ Koi favourite nahi — Home pe ✏️ Suggest Price ke paas star tapein");
+      return;
+    }
+    let msg = "⭐ Favourites:\n" + list.map(f => `${f.emoji} ${f.name} — ₹${f.price}`).join("\n");
+    alert(msg);
+  });
+
+  // ===== Alerts row =====
+  document.getElementById("showAlerts")?.addEventListener("click", () => {
+    if (priceAlerts.length === 0) {
+      if (confirm("Naya price alert add karein?")) addPriceAlert();
+      return;
+    }
+    addPriceAlert();
+  });
+
+  // ===== Edit Profile =====
+  document.getElementById("editProfileBtn")?.addEventListener("click", () => {
+    const user = window.zenviAuth?.auth?.currentUser;
+    if (!user) {
+      showToast("⚠️ Pehle login karein");
+      return;
+    }
+    showToast(`👤 ${user.displayName} — ${user.email}`);
+  });
+
+  // ===== About Zenvi =====
+  document.querySelectorAll(".zp-menu-row").forEach(row => {
+    const text = row.querySelector(".zp-row-text p")?.textContent;
+    if (text === "About Zenvi") {
+      row.addEventListener("click", () => {
+        alert("🌿 Zenvi — Smart Mandi App\n\nIndia ke kisan aur grahak ke liye live mandi prices.\n\nVersion: 1.0\nDeveloper: Aditya Soni\nMade with ❤️ in India 🇮🇳");
+      });
+    }
+    if (text === "Help & Support") {
+      row.addEventListener("click", () => {
+        window.open("mailto:support@zenvi.app?subject=Zenvi Help", "_blank");
+        showToast("📧 Email khul raha hai...");
+      });
+    }
+    if (text === "Privacy Policy") {
+      row.addEventListener("click", () => {
+        showToast("🔒 Aapka data secure hai. Koi third party ko share nahi kiya jaata.");
+      });
+    }
+    if (text === "List Your Crop") {
+      row.addEventListener("click", () => showToast("🌾 Coming Soon! Jald aayega."));
+    }
+    if (text === "Register Your Shop") {
+      row.addEventListener("click", () => showPage("shops"));
     }
   });
 }
@@ -1629,13 +1711,15 @@ document.addEventListener("visibilitychange", () => {
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 Zenvi starting...");
 
-  // Clear bad location data
-  const badNames = ["Bettiah, Bettiah", "Bettiah,Bettiah", "Bettiah"];
+  // Clear bad location data — coordinates aur invalid names
   const savedName = localStorage.getItem("zenvi_location_name");
-  if (savedName && badNames.includes(savedName.trim())) {
+  const badNames = ["Bettiah, Bettiah", "Bettiah,Bettiah", "Bettiah"];
+  const isCoordSaved = savedName && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(savedName.trim());
+  if (savedName && (badNames.includes(savedName.trim()) || isCoordSaved)) {
     localStorage.removeItem("zenvi_location");
     localStorage.removeItem("zenvi_location_name");
     localStorage.removeItem("zenvi_location_addr");
+    console.log("🧹 Cleared bad/coordinate location:", savedName);
   }
 
   const isRefresh = sessionStorage.getItem("zenvi_launched");
@@ -1671,3 +1755,139 @@ window.filterItems = filterItems;
 window.getCurrentLocation = getCurrentLocation;
 window.confirmAndProceed = confirmAndProceed;
 window.confirmLocation = confirmLocation;
+
+// ===== SHOP REGISTRATION =====
+window.toggleRegisterForm = function() {
+  const form = document.getElementById("shopRegisterForm");
+  if (!form) return;
+  const isOpen = form.style.display !== "none";
+  form.style.display = isOpen ? "none" : "block";
+  if (!isOpen) form.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+window.useCurrentLocationForShop = function() {
+  const input = document.getElementById("shopAddress");
+  if (!input) return;
+  const loc = window.currentLocation?.name || "";
+  if (loc) {
+    input.value = loc + (window.currentLocation?.fullAddr ? `, ${window.currentLocation.fullAddr.split(",")[0]}` : "");
+    showToast("📍 Location fill ho gayi!");
+  } else {
+    showToast("⚠️ Pehle Explore tab se location set karein");
+  }
+};
+
+window.submitShopRegistration = async function() {
+  const name    = document.getElementById("shopName")?.value.trim();
+  const owner   = document.getElementById("ownerName")?.value.trim();
+  const phone   = document.getElementById("shopPhone")?.value.trim();
+  const type    = document.getElementById("shopType")?.value;
+  const address = document.getElementById("shopAddress")?.value.trim();
+  const desc    = document.getElementById("shopDesc")?.value.trim();
+
+  // Validation
+  if (!name || !owner || !phone || !type || !address) {
+    showToast("⚠️ Saari * fields fill karein!");
+    return;
+  }
+  if (phone.replace(/\D/g,'').length < 10) {
+    showToast("⚠️ Valid phone number daalen");
+    return;
+  }
+
+  const btn = document.querySelector(".submit-shop-btn");
+  if (btn) { btn.textContent = "Submitting..."; btn.disabled = true; }
+
+  const shopData = {
+    name, owner, phone, type, address, desc,
+    lat: window.currentLocation?.lat || null,
+    lng: window.currentLocation?.lng || null,
+    registeredAt: new Date().toISOString(),
+    submittedBy: window.zenviAuth?.auth?.currentUser?.uid || "anonymous",
+    status: "pending"
+  };
+
+  // Save to Firebase if available
+  let saved = false;
+  if (window.zenviDB) {
+    try {
+      const { addDoc, collection } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+      await addDoc(collection(window.zenviDB, "shops"), shopData);
+      saved = true;
+    } catch(e) {
+      console.warn("Firebase save failed:", e);
+    }
+  }
+
+  // Also save locally
+  const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+  shops.push(shopData);
+  localStorage.setItem("zenvi_shops", JSON.stringify(shops));
+
+  if (btn) { btn.innerHTML = '<span class="material-icons-round">store</span> Register My Shop'; btn.disabled = false; }
+
+  showToast(`✅ "${name}" registered ho gayi!${saved ? " (Cloud saved)" : ""}`);
+
+  // Clear form
+  ["shopName","ownerName","shopPhone","shopAddress","shopDesc"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  document.getElementById("shopType").value = "";
+  document.getElementById("shopRegisterForm").style.display = "none";
+
+  // Refresh shops list
+  loadShopsList();
+};
+
+function loadShopsList() {
+  const list = document.getElementById("shopsList");
+  if (!list) return;
+
+  const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+
+  const typeEmoji = {
+    sabji:"🥬", phal:"🍎", kirana:"🛒", anaaj:"🌾",
+    dairy:"🥛", mandi:"🏪", other:"✨"
+  };
+  const typeLabel = {
+    sabji:"Sabji Bhandar", phal:"Phal Bhandar", kirana:"Kirana Store",
+    anaaj:"Anaaj/Dal", dairy:"Dairy/Milk", mandi:"Mandi/Wholesale", other:"Other"
+  };
+
+  if (shops.length === 0) {
+    list.innerHTML = `<div class="no-shops">
+      <span style="font-size:48px;">🏪</span>
+      <p>Abhi koi shop registered nahi hai.</p>
+      <p style="font-size:12px;color:#94a3b8;">Pehle shop register karein!</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = shops.map(s => `
+    <div class="shop-card">
+      <div class="shop-card-header">
+        <div class="shop-icon">${typeEmoji[s.type] || "🏪"}</div>
+        <div class="shop-card-info">
+          <h4>${s.name}</h4>
+          <p>${typeLabel[s.type] || "Shop"} • ${s.address}</p>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">👤 ${s.owner}</div>
+      <div class="shop-card-footer">
+        <button class="shop-call-btn" onclick="window.open('tel:${s.phone}')">
+          <span class="material-icons-round" style="font-size:16px;">call</span> Call
+        </button>
+        <button class="shop-call-btn" style="background:#dbeafe;color:#3b82f6;" onclick="window.open('https://wa.me/${s.phone.replace(/\D/g,'')}')">
+          💬 WhatsApp
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+// Load shops when page opens
+const _origShowPage = window.showPage;
+window.showPage = function(page) {
+  _origShowPage(page);
+  if (page === "shops") setTimeout(loadShopsList, 100);
+};
