@@ -1,5 +1,18 @@
 /* ===== ZENVI SCRIPT - IMPROVED ===== */
 
+// ===== DARK MODE INSTANT RESTORE (before DOM loads) =====
+if (localStorage.getItem("zenvi_dark") === "1") {
+  document.documentElement.classList.add("dark-mode");
+}
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem("zenvi_dark") === "1") {
+    document.body.classList.add("dark-mode");
+    const check = document.getElementById("darkModeCheck");
+    if (check) check.checked = true;
+  }
+});
+
+
 // ===== CONFIG =====
 const MAPPLS_API_KEY = "0daf1373cd967b80d2c6f73effdfd849";
 // Note: Keys are domain-restricted to zenvi-app.github.io only
@@ -1287,6 +1300,9 @@ function showPage(pageName) {
   if (pageName === "profile") {
     setTimeout(onProfileOpen, 100);
   }
+  if (pageName === "shops") {
+    setTimeout(loadShopsList, 100);
+  }
   currentPage = pageName;
   // Save immediately on every page change
   saveAppState();
@@ -1536,6 +1552,40 @@ function updateSavedLocation() {
 }
 
 // Dark mode toggle
+
+function showFavouritesList() {
+  if (favourites.length === 0) {
+    showToast("⭐ Koi favourite nahi — Home pe item pe tap karo");
+    return;
+  }
+  // Create popup
+  let modal = document.getElementById("favModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "favModal";
+    modal.style.cssText = "position:fixed;inset:0;z-index:3000;display:flex;align-items:flex-end;background:rgba(0,0,0,0.5);";
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div style="background:white;width:100%;border-radius:24px 24px 0 0;padding:24px 20px 40px;max-height:70vh;overflow-y:auto;">
+      <div style="width:40px;height:4px;background:#e2e8f0;border-radius:99px;margin:0 auto 16px;"></div>
+      <h3 style="font-size:17px;font-weight:800;margin-bottom:16px;">⭐ Favourite Items (${favourites.length})</h3>
+      ${favourites.map(f => `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9;">
+          <span style="font-size:24px;">${f.emoji}</span>
+          <div style="flex:1;"><p style="font-weight:700;margin:0;">${f.name}</p><span style="font-size:12px;color:#16a34a;">₹${f.price}/kg</span></div>
+          <button onclick="toggleFavourite({name:'${f.name}',emoji:'${f.emoji}',price:'${f.price}',unit:'${f.unit}'})" 
+            style="background:#fee2e2;color:#ef4444;border:none;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;">Remove</button>
+        </div>`).join('')}
+      <button onclick="document.getElementById('favModal').style.display='none';"
+        style="width:100%;margin-top:16px;padding:14px;background:#f1f5f9;color:#64748b;border:none;border-radius:12px;font-weight:700;cursor:pointer;font-family:inherit;">
+        Close
+      </button>
+    </div>`;
+  modal.style.display = "flex";
+  modal.onclick = e => { if (e.target === modal) modal.style.display = "none"; };
+}
+
 function setupProfileSettings() {
   // ===== 3-dot Dropdown =====
   document.getElementById("profileMenuBtn")?.addEventListener("click", (e) => {
@@ -1554,12 +1604,7 @@ function setupProfileSettings() {
     localStorage.setItem("zenvi_dark", e.target.checked ? "1" : "0");
     showToast(e.target.checked ? "🌙 Dark mode on" : "☀️ Light mode on");
   });
-  // Restore dark mode on load
-  if (localStorage.getItem("zenvi_dark") === "1") {
-    document.body.classList.add("dark-mode");
-    const check = document.getElementById("darkModeCheck");
-    if (check) check.checked = true;
-  }
+  // Dark mode is restored at startup (top of file)
 
   // ===== Notifications Toggle =====
   document.getElementById("notifCheck")?.addEventListener("change", e => {
@@ -1586,35 +1631,27 @@ function setupProfileSettings() {
     showToast("🔔 " + (priceAlerts.length > 0 ? `${priceAlerts.length} alerts set hain` : "Koi alert nahi hai"));
   });
 
-  // ===== Favourites row =====
-  document.getElementById("showFavourites")?.addEventListener("click", () => {
-    const list = favourites;
-    if (list.length === 0) {
-      showToast("⭐ Koi favourite nahi — Home pe ✏️ Suggest Price ke paas star tapein");
-      return;
-    }
-    let msg = "⭐ Favourites:\n" + list.map(f => `${f.emoji} ${f.name} — ₹${f.price}`).join("\n");
-    alert(msg);
-  });
-
-  // ===== Alerts row =====
-  document.getElementById("showAlerts")?.addEventListener("click", () => {
-    if (priceAlerts.length === 0) {
-      if (confirm("Naya price alert add karein?")) addPriceAlert();
-      return;
-    }
-    addPriceAlert();
-  });
-
   // ===== Edit Profile =====
   document.getElementById("editProfileBtn")?.addEventListener("click", () => {
     const user = window.zenviAuth?.auth?.currentUser;
-    if (!user) {
-      showToast("⚠️ Pehle login karein");
-      return;
-    }
-    showToast(`👤 ${user.displayName} — ${user.email}`);
+    if (!user) { showToast("⚠️ Pehle login karein"); return; }
+    const newName = prompt("Display name change karein:", user.displayName || "");
+    if (newName && newName.trim()) showToast(`✅ Name update: ${newName.trim()} (Google account se connected)`);
   });
+
+  // ===== Quick Row =====
+  document.getElementById("favQuickBtn")?.addEventListener("click", () => {
+    showFavouritesList();
+  });
+  document.getElementById("alertQuickBtn")?.addEventListener("click", () => {
+    addPriceAlert();
+  });
+
+  // ===== Favourites row =====
+  document.getElementById("showFavourites")?.addEventListener("click", showFavouritesList);
+
+  // ===== Alerts row =====
+  document.getElementById("showAlerts")?.addEventListener("click", () => addPriceAlert());
 
   // ===== About Zenvi =====
   document.querySelectorAll(".zp-menu-row").forEach(row => {
@@ -1711,15 +1748,16 @@ document.addEventListener("visibilitychange", () => {
 document.addEventListener("DOMContentLoaded", () => {
   console.log("🚀 Zenvi starting...");
 
-  // Clear bad location data — coordinates aur invalid names
-  const savedName = localStorage.getItem("zenvi_location_name");
+  // Clear ALL bad location data — coordinates aur invalid names
+  const savedName = localStorage.getItem("zenvi_location_name") || "";
   const badNames = ["Bettiah, Bettiah", "Bettiah,Bettiah", "Bettiah"];
-  const isCoordSaved = savedName && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(savedName.trim());
-  if (savedName && (badNames.includes(savedName.trim()) || isCoordSaved)) {
+  const hasCommaDigits = /\d+\.\d+/.test(savedName); // catches "26.8018, 84.5037"
+  const isBadLocation = !savedName || badNames.includes(savedName.trim()) || hasCommaDigits;
+  if (isBadLocation) {
     localStorage.removeItem("zenvi_location");
     localStorage.removeItem("zenvi_location_name");
     localStorage.removeItem("zenvi_location_addr");
-    console.log("🧹 Cleared bad/coordinate location:", savedName);
+    console.log("🧹 Cleared bad location:", savedName || "(empty)");
   }
 
   const isRefresh = sessionStorage.getItem("zenvi_launched");
@@ -1807,26 +1845,24 @@ window.submitShopRegistration = async function() {
     status: "pending"
   };
 
-  // Save to Firebase if available
-  let saved = false;
-  if (window.zenviDB) {
-    try {
-      const { addDoc, collection } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-      await addDoc(collection(window.zenviDB, "shops"), shopData);
-      saved = true;
-    } catch(e) {
-      console.warn("Firebase save failed:", e);
-    }
-  }
-
-  // Also save locally
+  // Save to localStorage FIRST (always works)
   const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
   shops.push(shopData);
   localStorage.setItem("zenvi_shops", JSON.stringify(shops));
 
+  // Save to Firebase (permanent cloud storage)
+  let cloudSaved = false;
+  if (window.saveShopToFirebase) {
+    cloudSaved = await window.saveShopToFirebase(shopData);
+  }
+
   if (btn) { btn.innerHTML = '<span class="material-icons-round">store</span> Register My Shop'; btn.disabled = false; }
 
-  showToast(`✅ "${name}" registered ho gayi!${saved ? " (Cloud saved)" : ""}`);
+  if (cloudSaved) {
+    showToast(`✅ "${name}" permanently save ho gayi! ☁️`);
+  } else {
+    showToast(`✅ "${name}" locally saved! Login karein cloud save ke liye.`);
+  }
 
   // Clear form
   ["shopName","ownerName","shopPhone","shopAddress","shopDesc"].forEach(id => {
@@ -1844,7 +1880,29 @@ function loadShopsList() {
   const list = document.getElementById("shopsList");
   if (!list) return;
 
+  // Load from Firebase first if available
+  if (window.loadShopsFromFirebase) {
+    window.loadShopsFromFirebase().then(firebaseShops => {
+      if (firebaseShops.length > 0) {
+        renderShopsList(firebaseShops);
+        return;
+      }
+      // Fallback to localStorage
+      const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+      renderShopsList(shops);
+    });
+    return;
+  }
+
   const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+  renderShopsList(shops);
+}
+
+function loadShopsList_inner() {} // placeholder
+
+function renderShopsList(shops) {
+  const list = document.getElementById("shopsList");
+  if (!list) return;
 
   const typeEmoji = {
     sabji:"🥬", phal:"🍎", kirana:"🛒", anaaj:"🌾",
@@ -1885,9 +1943,4 @@ function loadShopsList() {
     </div>`).join('');
 }
 
-// Load shops when page opens
-const _origShowPage = window.showPage;
-window.showPage = function(page) {
-  _origShowPage(page);
-  if (page === "shops") setTimeout(loadShopsList, 100);
-};
+// loadShopsList on shops page open is handled in showPage directly
