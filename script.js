@@ -1365,9 +1365,143 @@ function confirmAndProceed() {
     }, 1500);
   }
 
-  showToast("📍 " + name + " saved!");
-  showPage("home");
+  // Instead of going home directly, show address details form (Swiggy style)
+  showAddressDetailsForm(name, addr);
 }
+
+// ===== SWIGGY-STYLE ADDRESS DETAILS FORM =====
+function showAddressDetailsForm(locationName, locationAddr) {
+  let modal = document.getElementById("addressDetailsModal");
+  if (!modal) { modal = document.createElement("div"); modal.id = "addressDetailsModal"; document.body.appendChild(modal); }
+
+  const user = window.zenviAuth?.auth?.currentUser;
+  const phone = localStorage.getItem("zenvi_phone") || (user?.phoneNumber || "");
+  const userName = user?.displayName || localStorage.getItem("zenvi_username") || "";
+
+  modal.style.cssText = "position:fixed;inset:0;z-index:3500;background:white;overflow-y:auto;";
+  modal.innerHTML = `
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:12px;padding:16px;background:white;border-bottom:1px solid #f1f5f9;position:sticky;top:0;z-index:1;">
+      <button onclick="document.getElementById('addressDetailsModal').style.display='none';"
+        style="background:none;border:none;cursor:pointer;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:50%;">
+        <span class="material-icons-round">arrow_back</span>
+      </button>
+      <h2 style="font-size:17px;font-weight:800;margin:0;flex:1;">Address Details</h2>
+    </div>
+
+    <!-- Mini map preview -->
+    <div style="height:160px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;">
+      <span style="font-size:40px;">📍</span>
+      <p style="font-size:14px;font-weight:700;color:#16a34a;margin:0;">${locationName}</p>
+      <p style="font-size:12px;color:#64748b;margin:0;">${locationAddr}</p>
+    </div>
+
+    <div style="padding:16px;">
+
+      <!-- Delivery location row -->
+      <div style="background:#fff5f5;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:20px;cursor:pointer;" onclick="document.getElementById('addressDetailsModal').style.display='none';">
+        <span class="material-icons-round" style="color:#ef4444;font-size:20px;">location_on</span>
+        <div style="flex:1;">
+          <p style="font-size:14px;font-weight:700;color:#1e293b;margin:0;">${locationName}</p>
+          <p style="font-size:12px;color:#64748b;margin:0;">${locationAddr}</p>
+        </div>
+        <span class="material-icons-round" style="color:#94a3b8;font-size:18px;">chevron_right</span>
+      </div>
+
+      <!-- Address details input -->
+      <p style="font-size:13px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;margin:0 0 10px;">ADDRESS DETAILS</p>
+      
+      <div style="margin-bottom:14px;">
+        <input id="addrFloor" placeholder="House no., Floor, Building name" type="text"
+          style="width:100%;padding:14px;border:1.5px solid #e2e8f0;border-radius:12px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;">
+      </div>
+      <div style="margin-bottom:20px;">
+        <input id="addrLandmark" placeholder="Landmark (optional) e.g. Near School"
+          style="width:100%;padding:14px;border:1.5px solid #e2e8f0;border-radius:12px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;">
+      </div>
+
+      <!-- Receiver details -->
+      <p style="font-size:13px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;margin:0 0 10px;">YOUR DETAILS</p>
+      
+      <div style="border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;display:flex;align-items:center;gap:12px;margin-bottom:14px;cursor:pointer;">
+        <span class="material-icons-round" style="color:#94a3b8;font-size:20px;">phone</span>
+        <input id="addrName" placeholder="Your name" value="${userName}"
+          style="flex:1;border:none;outline:none;font-size:14px;font-family:inherit;font-weight:600;">
+        <span style="color:#e2e8f0;">|</span>
+        <input id="addrPhone" placeholder="+91 XXXXXXXXXX" value="${phone}" type="tel"
+          style="flex:1;border:none;outline:none;font-size:14px;font-family:inherit;color:#64748b;">
+      </div>
+
+      <!-- Save address as -->
+      <p style="font-size:13px;font-weight:700;color:#94a3b8;letter-spacing:0.5px;margin:0 0 10px;">SAVE ADDRESS AS</p>
+      <div style="display:flex;gap:10px;margin-bottom:20px;" id="addressLabelRow">
+        ${["Home","Work","Other"].map((label, i) => `
+          <button onclick="selectAddressLabel('${label}')" id="label${label}"
+            style="flex:1;padding:12px 8px;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+            border:2px solid ${i===0?'#16a34a':'#e2e8f0'};background:${i===0?'#f0fdf4':'white'};
+            color:${i===0?'#16a34a':'#64748b'};display:flex;align-items:center;justify-content:center;gap:6px;">
+            <span class="material-icons-round" style="font-size:16px;">${label==='Home'?'home':label==='Work'?'business':'location_on'}</span>
+            ${label}
+          </button>`).join('')}
+      </div>
+
+      <!-- Save button -->
+      <button onclick="saveAddressDetails('${locationName}', '${locationAddr}')"
+        style="width:100%;padding:16px;background:#16a34a;color:white;border:none;border-radius:14px;
+        font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(22,163,74,0.3);">
+        Save Address
+      </button>
+
+    </div>
+  `;
+
+  window._selectedAddressLabel = "Home";
+  modal.style.display = "block";
+}
+
+window.selectAddressLabel = function(label) {
+  window._selectedAddressLabel = label;
+  ["Home","Work","Other"].forEach(l => {
+    const btn = document.getElementById("label" + l);
+    if (!btn) return;
+    const active = l === label;
+    btn.style.borderColor = active ? "#16a34a" : "#e2e8f0";
+    btn.style.background = active ? "#f0fdf4" : "white";
+    btn.style.color = active ? "#16a34a" : "#64748b";
+  });
+};
+
+window.saveAddressDetails = function(locationName, locationAddr) {
+  const floor = document.getElementById("addrFloor")?.value.trim();
+  const landmark = document.getElementById("addrLandmark")?.value.trim();
+  const name = document.getElementById("addrName")?.value.trim();
+  const phone = document.getElementById("addrPhone")?.value.trim();
+  const label = window._selectedAddressLabel || "Home";
+
+  // Build full address
+  const parts = [floor, locationName, landmark, locationAddr].filter(Boolean);
+  const fullAddress = parts.join(", ");
+
+  // Save to localStorage
+  if (name) localStorage.setItem("zenvi_username", name);
+  if (phone) localStorage.setItem("zenvi_phone", phone);
+
+  const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+  const existing = saved.findIndex(a => a.label === label);
+  const entry = {
+    label, name: locationName, fullAddr: fullAddress,
+    floor, landmark, contactName: name, phone,
+    lat: currentLocation?.lat, lng: currentLocation?.lng,
+    savedAt: new Date().toISOString()
+  };
+  if (existing >= 0) saved[existing] = entry;
+  else saved.push(entry);
+  localStorage.setItem("zenvi_saved_addresses", JSON.stringify(saved));
+
+  document.getElementById("addressDetailsModal").style.display = "none";
+  showToast("✅ " + label + " address saved!");
+  showPage("home");
+};
 
 // ===== TOAST NOTIFICATION =====
 function showToast(msg, duration = 3000) {
@@ -2840,24 +2974,47 @@ function openLocationSelector() {
     <div style="padding:14px 16px 6px;">
       <p style="font-size:11px;font-weight:800;color:#94a3b8;letter-spacing:0.8px;margin:0 0 10px;">SAVED ADDRESSES</p>
       ${saved.map((addr, i) => `
-        <div onclick="selectSavedAddress(${i})" 
-          style="display:flex;align-items:center;gap:14px;padding:14px;border-radius:12px;cursor:pointer;
-          margin-bottom:6px;border:1.5px solid ${addr.name === currentName ? '#16a34a' : '#f1f5f9'};
-          background:${addr.name === currentName ? '#f0fdf4' : 'white'};">
-          <div style="width:44px;height:44px;background:${addr.label==='Home'?'#f0fdf4':addr.label==='Office'?'#eff6ff':'#f8fafc'};
-            border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <span class="material-icons-round" style="font-size:20px;color:${addr.label==='Home'?'#16a34a':addr.label==='Office'?'#3b82f6':'#64748b'};">
-              ${addr.label==='Home'?'home':addr.label==='Office'?'business':'location_on'}
-            </span>
-          </div>
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
-              <p style="font-size:14px;font-weight:800;margin:0;color:#1e293b;">${addr.label || "Saved"}</p>
-              ${addr.name === currentName ? '<span style="background:#16a34a;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;">SELECTED</span>' : ""}
+        <div style="border:1.5px solid ${addr.name === currentName ? '#16a34a' : '#f1f5f9'};
+          background:${addr.name === currentName ? '#f0fdf4' : 'white'};
+          border-radius:12px;margin-bottom:8px;overflow:hidden;">
+          <!-- Main row - clickable -->
+          <div onclick="selectSavedAddress(${i})" style="display:flex;align-items:center;gap:14px;padding:14px;cursor:pointer;">
+            <div style="width:44px;height:44px;background:${addr.label==='Home'?'#f0fdf4':addr.label==='Work'?'#eff6ff':'#f8fafc'};
+              border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <span class="material-icons-round" style="font-size:20px;color:${addr.label==='Home'?'#16a34a':addr.label==='Work'?'#3b82f6':'#64748b'};">
+                ${addr.label==='Home'?'home':addr.label==='Work'?'business':'location_on'}
+              </span>
             </div>
-            <p style="font-size:12px;color:#64748b;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${addr.fullAddr || addr.name}</p>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+                <p style="font-size:14px;font-weight:800;margin:0;color:#1e293b;">${addr.label || "Saved"}</p>
+                ${addr.name === currentName ? '<span style="background:#16a34a;color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;">SELECTED</span>' : ""}
+              </div>
+              <p style="font-size:12px;color:#64748b;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${addr.fullAddr || addr.name}</p>
+              ${addr.contactName ? `<p style="font-size:11px;color:#94a3b8;margin:2px 0 0;">${addr.contactName}${addr.phone ? ' • ' + addr.phone : ''}</p>` : ''}
+            </div>
+            ${distText(addr) ? `<span style="font-size:11px;font-weight:700;color:#94a3b8;flex-shrink:0;">${distText(addr)}</span>` : ""}
           </div>
-          ${distText(addr) ? `<span style="font-size:11px;font-weight:700;color:#94a3b8;flex-shrink:0;">${distText(addr)}</span>` : ""}
+          <!-- Action row: Edit + Share + Delete -->
+          <div style="display:flex;border-top:1px solid #f1f5f9;">
+            <button onclick="editSavedAddress(${i})"
+              style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:12px;font-weight:700;
+              color:#3b82f6;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;">
+              <span class="material-icons-round" style="font-size:14px;">edit</span> Edit
+            </button>
+            <div style="width:1px;background:#f1f5f9;"></div>
+            <button onclick="shareSavedAddress(${i})"
+              style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:12px;font-weight:700;
+              color:#16a34a;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;">
+              <span class="material-icons-round" style="font-size:14px;">share</span> Share
+            </button>
+            <div style="width:1px;background:#f1f5f9;"></div>
+            <button onclick="deleteSavedAddress(${i})"
+              style="flex:1;padding:10px;background:none;border:none;cursor:pointer;font-size:12px;font-weight:700;
+              color:#ef4444;display:flex;align-items:center;justify-content:center;gap:4px;font-family:inherit;">
+              <span class="material-icons-round" style="font-size:14px;">delete</span> Delete
+            </button>
+          </div>
         </div>
       `).join('')}
     </div>` : `
@@ -2990,4 +3147,37 @@ window.saveAsAddress = function(label) {
   else saved.push(entry);
   localStorage.setItem("zenvi_saved_addresses", JSON.stringify(saved));
   showToast(`✅ ${label} address saved!`);
+};
+
+window.editSavedAddress = function(idx) {
+  const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+  const addr = saved[idx];
+  if (!addr) return;
+  document.getElementById("locationSelectorModal").style.display = "none";
+  // Set currentLocation to saved address then show form
+  currentLocation = { lat: addr.lat, lng: addr.lng, name: addr.name, fullAddr: addr.fullAddr };
+  showAddressDetailsForm(addr.name, addr.fullAddr || "");
+};
+
+window.shareSavedAddress = function(idx) {
+  const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+  const addr = saved[idx];
+  if (!addr) return;
+  const text = addr.label + ": " + (addr.fullAddr || addr.name) +
+    (addr.lat && addr.lng ? "\nMap: https://maps.google.com/?q=" + addr.lat + "," + addr.lng : "");
+  if (navigator.share) {
+    navigator.share({ title: "My " + addr.label + " Address", text });
+  } else {
+    navigator.clipboard?.writeText(text);
+    showToast("📋 Address copied!");
+  }
+};
+
+window.deleteSavedAddress = function(idx) {
+  if (!confirm("Is address ko delete karein?")) return;
+  const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+  saved.splice(idx, 1);
+  localStorage.setItem("zenvi_saved_addresses", JSON.stringify(saved));
+  showToast("🗑️ Address deleted!");
+  openLocationSelector(); // Refresh
 };
