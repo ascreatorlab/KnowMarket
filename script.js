@@ -26,6 +26,26 @@ function isCoordinateString(str) {
          ["null","undefined","Selected Location","Map pe location chunein..."].includes(str.trim());
 }
 
+
+// ===== PER-USER STORAGE HELPERS =====
+function getUserKey(key) {
+  const uid = window.zenviAuth?.auth?.currentUser?.uid || "guest";
+  return "zenvi_user_" + uid + "_" + key;
+}
+function getUserPhone() {
+  return localStorage.getItem(getUserKey("phone")) || "";
+}
+function setUserPhone(phone) {
+  if (phone) localStorage.setItem(getUserKey("phone"), phone);
+}
+function getUserName() {
+  const user = window.zenviAuth?.auth?.currentUser;
+  return user?.displayName || localStorage.getItem(getUserKey("name")) || "";
+}
+function setUserName(name) {
+  if (name) localStorage.setItem(getUserKey("name"), name);
+}
+
 // ===== STATE =====
 let marketData = [];
 let mapplsMap = null;
@@ -1334,10 +1354,17 @@ function confirmAndProceed() {
              isGood(curName) ? curName : "";
   let addr = shownAddr || currentLocation.fullAddr || "";
 
-  // If no good name — just save with generic label (NEVER block user)
-  if (!name) {
-    name = "Meri Location";
-    addr = "";
+  // If still loading and no valid name — wait for geocode, don't save bad name
+  if (!name || name === "📍 Dhundh raha hai..." || isCoordinateString(name)) {
+    // Try one more time from display
+    const shownAgain = (document.getElementById("selectedLocationName")?.textContent || "").trim();
+    if (shownAgain && !BAD.has(shownAgain) && !isCoordinateString(shownAgain) && shownAgain.length > 2) {
+      name = shownAgain;
+    } else {
+      showToast("⏳ Location naam aa raha hai... 2 second ruko");
+      setTimeout(() => confirmAndProceed(), 2000);
+      return;
+    }
   }
 
   // Save
@@ -1391,8 +1418,8 @@ function showAddressDetailsForm(locationName, locationAddr, existingAddr, editId
   if (!modal) { modal = document.createElement("div"); modal.id = "addressDetailsModal"; document.body.appendChild(modal); }
 
   const user = window.zenviAuth?.auth?.currentUser;
-  const phone = localStorage.getItem("zenvi_phone") || (user?.phoneNumber || "");
-  const userName = user?.displayName || localStorage.getItem("zenvi_username") || "";
+  const phone = getUserPhone() || (user?.phoneNumber || "");
+  const userName = user?.displayName || getUserName();
 
   modal.style.cssText = "position:fixed;inset:0;z-index:3500;background:white;overflow-y:auto;";
   modal.innerHTML = `
@@ -1406,10 +1433,20 @@ function showAddressDetailsForm(locationName, locationAddr, existingAddr, editId
     </div>
 
     <!-- Mini map preview -->
-    <div style="height:160px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;">
-      <span style="font-size:40px;">📍</span>
-      <p style="font-size:14px;font-weight:700;color:#16a34a;margin:0;">${locationName}</p>
-      <p style="font-size:12px;color:#64748b;margin:0;">${locationAddr}</p>
+    <div style="height:140px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;cursor:pointer;" onclick="document.getElementById('addressDetailsModal').style.display='none';showPage('explore');">
+      <span style="font-size:36px;">📍</span>
+      <p style="font-size:14px;font-weight:700;color:#16a34a;margin:0;text-align:center;padding:0 20px;">${locationName && locationName.length > 2 ? locationName : "Location set karein"}</p>
+      <p style="font-size:12px;color:#64748b;margin:0;">${locationAddr && locationAddr !== "Map drag karo ya search karein" ? locationAddr : "Map pe tap karein"}</p>
+    </div>
+
+    <!-- Location row -->
+    <div style="margin:12px 16px;background:#fff5f5;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="document.getElementById('addressDetailsModal').style.display='none';showPage('explore');">
+      <span class="material-icons-round" style="color:#ef4444;font-size:18px;">location_on</span>
+      <div style="flex:1;min-width:0;">
+        <p style="font-size:14px;font-weight:700;color:#1e293b;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${locationName && locationName.length > 2 ? locationName : "Location select karein"}</p>
+        <p style="font-size:12px;color:#64748b;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${locationAddr && locationAddr !== "Map drag karo ya search karein" ? locationAddr : "Explore tab pe jaayein"}</p>
+      </div>
+      <span class="material-icons-round" style="color:#94a3b8;font-size:18px;">chevron_right</span>
     </div>
 
     <div style="padding:16px;">
@@ -1502,8 +1539,8 @@ window.saveAddressDetails = function(locationName, locationAddr) {
   const fullAddress = parts.join(", ");
 
   // Save to localStorage
-  if (name) localStorage.setItem("zenvi_username", name);
-  if (phone) localStorage.setItem("zenvi_phone", phone);
+  setUserName(name);
+  setUserPhone(phone);
 
   const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
   const entry = {
@@ -2146,14 +2183,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Clear ALL bad/coordinate location data on startup
   const savedName = localStorage.getItem("zenvi_location_name") || "";
   const badNames = ["Bettiah, Bettiah", "Bettiah,Bettiah", "Bettiah"];
+  const ALL_BAD_NAMES = ["My Location","Meri Location","Selected Area","My Area",
+    "Selecting...","Location selected ✓","Map pe location chunein...",
+    "📍 Dhundh raha hai..."];
   const isBadLocation = isCoordinateString(savedName) || badNames.includes(savedName.trim()) 
-    || savedName.includes("Map drag") || savedName === "My Location" 
-    || savedName === "Selected Area" || savedName.includes("drag karo");
+    || savedName.includes("Map drag") || savedName.includes("drag karo")
+    || ALL_BAD_NAMES.includes(savedName);
   if (isBadLocation) {
     localStorage.removeItem("zenvi_location");
     localStorage.removeItem("zenvi_location_name");
     localStorage.removeItem("zenvi_location_addr");
-    // Also clear cached prices with coordinate names
     localStorage.removeItem("zenvi_prices");
     localStorage.removeItem("zenvi_prices_time");
     console.log("🧹 Cleared bad location:", savedName || "(empty)");
@@ -2461,7 +2500,7 @@ function openEditProfileModal(user) {
           <label style="font-size:12px;color:#94a3b8;font-weight:600;display:block;margin-bottom:4px;">Mobile</label>
           <div style="border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;display:flex;align-items:center;">
             <input id="editPhone" type="tel" 
-              value="${localStorage.getItem('zenvi_phone') || ''}"
+              value="${getUserPhone()}"
               style="flex:1;border:none;outline:none;font-size:15px;font-weight:600;font-family:inherit;color:#1e293b;"
               placeholder="+91 XXXXXXXXXX" maxlength="13">
             <span style="font-size:12px;font-weight:700;color:#16a34a;cursor:pointer;" 
@@ -2516,7 +2555,7 @@ window.saveProfileChanges = function() {
   const phone  = document.getElementById("editPhone")?.value.trim();
   const gender = document.getElementById("editGender")?.value;
 
-  if (phone) localStorage.setItem("zenvi_phone", phone);
+  setUserPhone(phone);
   if (gender) localStorage.setItem("zenvi_gender", gender);
 
   // Update displayed name
@@ -2722,6 +2761,14 @@ window.openRateShop = function(shopId, shopName) {
     showToast("⚠️ Rating dene ke liye login karein");
     return;
   }
+  // Block owner from rating own shop
+  // Block owner from rating own shop
+  const shops = window._shopsData || JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+  const shop = shops.find(s => s.id === shopId || s.name === shopName);
+  if (shop && shop.submittedBy === user.uid) {
+    showToast("❌ Aap apni khud ki shop ko rate nahi kar sakte!");
+    return;
+  }
 
   let modal = document.getElementById("rateShopModal");
   if (!modal) { modal = document.createElement("div"); modal.id = "rateShopModal"; document.body.appendChild(modal); }
@@ -2819,7 +2866,14 @@ window.submitShopRating = async function(shopId, shopName) {
   document.getElementById("rateShopModal").style.display = "none";
   window._selectedStars = 0;
   showToast(`⭐ Rating submit ho gayi! ${stars}/5 stars`);
-  setTimeout(loadShopsList, 500); // Refresh list
+  
+  // Update shop in _shopsData and refresh view
+  const allShops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+  const shopToShow = allShops.find(s => s.id === shopId || s.name === shopName);
+  setTimeout(() => {
+    if (shopToShow) window.viewShopDetail(shopToShow);
+    loadShopsList();
+  }, 400);
 };
 
 // ===== SHOP DETAIL PAGE =====
@@ -2875,7 +2929,7 @@ window.viewShopDetail = function(shopJson) {
         <div>
           <h3 style="color:white;font-size:20px;font-weight:800;margin:0 0 4px;">${s.name}</h3>
           <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0 0 6px;">${typeLabel[s.type] || "Shop"}</p>
-          ${s.rating ? `<span style="background:rgba(255,255,255,0.2);color:white;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;">⭐ ${s.rating}</span>` : ""}
+          <span id="shopDetailRating_${s.name.replace(/\s/g,'_')}" style="background:rgba(255,255,255,0.2);color:white;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;${s.rating?'':'display:none'}">⭐ <span class="rating-val">${s.rating||''}</span> (${s.ratingCount||0})</span>
         </div>
       </div>
     </div>
@@ -3294,8 +3348,8 @@ window.saveEditedAddress = function(idx) {
     fullAddr: [floor, saved[idx].name, landmark, saved[idx].fullAddr].filter(Boolean).join(", ")
   };
   
-  if (name) localStorage.setItem("zenvi_username", name);
-  if (phone) localStorage.setItem("zenvi_phone", phone);
+  setUserName(name);
+  setUserPhone(phone);
   localStorage.setItem("zenvi_saved_addresses", JSON.stringify(saved));
   
   // Update current location display if this is selected
@@ -3443,14 +3497,23 @@ window.quickAddItem = function(name, price) {
 
 window.saveShopItems = function(shopId) {
   const items = document.getElementById("shopItemsInput")?.value.trim();
+  if (!items) { showToast("⚠️ Koi item nahi daala!"); return; }
+  
   const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
   const idx = shops.findIndex(s => s.id === shopId || s.name === shopId);
   if (idx >= 0) {
     shops[idx].items = items;
     localStorage.setItem("zenvi_shops", JSON.stringify(shops));
+    window._shopsData = shops; // Update global
     showToast("✅ Items saved!");
     document.getElementById("addItemsShopModal").style.display = "none";
+    // Refresh shop detail view
+    setTimeout(() => {
+      window.viewShopDetail(shops[idx]);
+    }, 300);
     loadShopsList();
+  } else {
+    showToast("❌ Shop nahi mila — reload karein");
   }
 };
 window.viewShopByIndex = function(idx) {
