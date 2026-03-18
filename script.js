@@ -1087,14 +1087,21 @@ const MANDIS_DB = [
 ];
 
 function getDistanceKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const toRad = x => x * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat/2)**2 +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
-  const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return Math.round(dist); // Round to whole number
+  // Validate inputs
+  lat1 = parseFloat(lat1); lng1 = parseFloat(lng1);
+  lat2 = parseFloat(lat2); lng2 = parseFloat(lng2);
+  if (isNaN(lat1)||isNaN(lng1)||isNaN(lat2)||isNaN(lng2)) return "?";
+  if (lat1===lat2 && lng1===lng2) return "0";
+  
+  const R = 6371; // Earth radius km
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLng = (lng2-lng1) * Math.PI/180;
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+            Math.sin(dLng/2)*Math.sin(dLng/2);
+  const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const d = R * c;
+  return d < 1 ? (d*1000).toFixed(0)+"m" : d.toFixed(1)+"km";
 }
 
 function loadNearbyMandis() {
@@ -2334,20 +2341,25 @@ function renderShopsList(shops) {
 
       <!-- Action buttons -->
       <div style="display:flex;gap:8px;" onclick="event.stopPropagation()">
-        ${s.lat && s.lng ? `
-        <button onclick="window.open('https://maps.google.com/?q=${s.lat},${s.lng}', '_blank')"
+        <button onclick="viewShopDetail(${JSON.stringify(JSON.stringify(s)).slice(1,-1)})"
           style="flex:1;padding:10px;background:#f0fdf4;color:var(--primary);border:1.5px solid #bbf7d0;
           border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
           display:flex;align-items:center;justify-content:center;gap:6px;">
-          <span class="material-icons-round" style="font-size:16px;">map</span> Map
-        </button>` : ""}
-        ${phone ? `
+          <span class="material-icons-round" style="font-size:16px;">storefront</span> View
+        </button>
+        ${s.submittedBy === window.zenviAuth?.auth?.currentUser?.uid ? `
+        <button onclick="editMyShop(${JSON.stringify(JSON.stringify(s)).slice(1,-1)})"
+          style="flex:1;padding:10px;background:#eff6ff;color:#3b82f6;border:1.5px solid #bfdbfe;
+          border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
+          display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span class="material-icons-round" style="font-size:16px;">edit</span> Edit
+        </button>` : `
         <button onclick="window.open('https://wa.me/${phone}?text=Hi, I found your shop on Zenvi app!', '_blank')"
-          style="flex:2;padding:10px;background:#dcfce7;color:#16a34a;border:1.5px solid #bbf7d0;
+          style="flex:1;padding:10px;background:#dcfce7;color:#16a34a;border:1.5px solid #bbf7d0;
           border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;
           display:flex;align-items:center;justify-content:center;gap:6px;">
           💬 WhatsApp
-        </button>` : ""}
+        </button>`}
       </div>
     </div>`;
   }).join('');
@@ -2481,83 +2493,93 @@ window.saveProfileChanges = function() {
   showToast("✅ Profile updated!");
 };
 
-// ===== ABOUT ZENVI MODAL =====
+// ===== PREMIUM ABOUT MODAL =====
 function openAboutModal() {
   let modal = document.getElementById("aboutModal");
-  if (!modal) {
-    modal = document.createElement("div");
-    modal.id = "aboutModal";
-    document.body.appendChild(modal);
-  }
+  if (!modal) { modal = document.createElement("div"); modal.id = "aboutModal"; document.body.appendChild(modal); }
 
-  modal.style.cssText = "position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:20px;";
-
+  modal.style.cssText = "position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;padding:0;";
   modal.innerHTML = `
-    <div style="background:white;width:100%;border-radius:24px;overflow:hidden;max-width:400px;">
+    <div style="background:white;width:100%;border-radius:24px 24px 0 0;max-height:92vh;overflow-y:auto;">
       
       <!-- Green header -->
-      <div style="background:linear-gradient(135deg,#15803d,#16a34a);padding:32px 24px;text-align:center;">
-        <div style="font-size:56px;margin-bottom:12px;">🌿</div>
-        <h2 style="color:white;font-size:28px;font-weight:800;margin:0 0 4px;">Zenvi</h2>
-        <p style="color:rgba(255,255,255,0.85);font-size:14px;margin:0;">Smart Mandi App</p>
+      <div style="background:linear-gradient(145deg,#15803d,#16a34a,#22c55e);padding:36px 24px 28px;text-align:center;position:relative;">
+        <div style="width:72px;height:72px;background:rgba(255,255,255,0.15);border-radius:20px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);">
+          <span style="font-size:40px;">🌿</span>
+        </div>
+        <h1 style="color:white;font-size:28px;font-weight:800;margin:0 0 4px;letter-spacing:-0.5px;">Zenvi</h1>
+        <p style="color:rgba(255,255,255,0.8);font-size:14px;margin:0;letter-spacing:1px;font-weight:600;">SMART MANDI APP</p>
       </div>
 
-      <!-- Content -->
-      <div style="padding:24px;">
-        <p style="font-size:14px;color:#475569;line-height:1.7;margin-bottom:20px;">
-          India ke kisan aur grahak ke liye <strong>live mandi prices</strong>, AI assistant, aur nearby shops — sab ek jagah.
+      <div style="padding:20px 20px 36px;">
+        
+        <!-- Tagline -->
+        <p style="font-size:14px;color:#475569;text-align:center;line-height:1.6;margin:0 0 20px;padding:0 8px;">
+          Real-time sabji, phal aur anaaj ke rates aur nearby shops — bilkul free.
         </p>
 
-        <!-- Stats -->
+        <!-- Stats cards -->
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;">
-          <div style="background:#f0fdf4;border-radius:12px;padding:12px;text-align:center;">
-            <p style="font-size:20px;font-weight:800;color:#16a34a;margin:0;">100+</p>
-            <p style="font-size:11px;color:#64748b;margin:0;">Items</p>
-          </div>
-          <div style="background:#f0fdf4;border-radius:12px;padding:12px;text-align:center;">
-            <p style="font-size:20px;font-weight:800;color:#16a34a;margin:0;">Free</p>
-            <p style="font-size:11px;color:#64748b;margin:0;">Always</p>
-          </div>
-          <div style="background:#f0fdf4;border-radius:12px;padding:12px;text-align:center;">
-            <p style="font-size:20px;font-weight:800;color:#16a34a;margin:0;">AI</p>
-            <p style="font-size:11px;color:#64748b;margin:0;">Powered</p>
-          </div>
-        </div>
-
-        <!-- Features -->
-        <div style="margin-bottom:20px;">
-          ${[
-            ["📊","Live Mandi Prices","data.gov.in se real-time data"],
-            ["🤖","AI Assistant","Gemini powered mandi guide"],
-            ["🗺️","Map Location","Mappls India map integration"],
-            ["👥","Community Data","User suggested prices"],
-            ["🏪","Shop Register","Local dukaan listing"]
-          ].map(([icon,title,sub]) => `
-            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;">
-              <span style="font-size:20px;">${icon}</span>
-              <div>
-                <p style="font-size:13px;font-weight:700;color:#1e293b;margin:0;">${title}</p>
-                <p style="font-size:11px;color:#94a3b8;margin:0;">${sub}</p>
-              </div>
+          ${[["100+","Items"],["Free","Always"],["AI","Powered"]].map(([n,l]) => `
+            <div style="background:#f0fdf4;border-radius:14px;padding:14px 8px;text-align:center;">
+              <p style="font-size:22px;font-weight:800;color:#16a34a;margin:0 0 2px;">${n}</p>
+              <p style="font-size:11px;color:#64748b;font-weight:600;margin:0;">${l}</p>
             </div>`).join('')}
         </div>
 
-        <!-- Developer info -->
-        <div style="background:#f8fafc;border-radius:12px;padding:14px;margin-bottom:16px;text-align:center;">
-          <p style="font-size:13px;color:#64748b;margin:0 0 4px;">Developer</p>
-          <p style="font-size:15px;font-weight:800;color:#1e293b;margin:0;">Aditya Soni</p>
-          <p style="font-size:12px;color:#94a3b8;margin:4px 0 0;">Version 1.0 • Made with ❤️ in India 🇮🇳</p>
+        <!-- Features -->
+        <div style="background:#f8fafc;border-radius:16px;padding:16px;margin-bottom:16px;">
+          <p style="font-size:11px;font-weight:800;color:#94a3b8;letter-spacing:0.8px;margin:0 0 12px;">FEATURES</p>
+          ${[
+            ["📊","Live Mandi Prices","Real-time data.gov.in se"],
+            ["🔍","Smart Search","Hindi + Hinglish support"],
+            ["📍","Nearby Shops & Mandis","GPS aur Mappls map"],
+            ["🤖","AI Assistant","Gemini powered insights"]
+          ].map(([ic,t,s]) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9;">
+              <span style="font-size:20px;">${ic}</span>
+              <div><p style="font-size:14px;font-weight:700;color:#1e293b;margin:0;">${t}</p>
+              <p style="font-size:11px;color:#94a3b8;margin:0;">${s}</p></div>
+            </div>`).join('')}
         </div>
 
+        <!-- Coming Soon -->
+        <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:center;">
+          <span style="font-size:24px;">🚀</span>
+          <div>
+            <p style="font-size:13px;font-weight:800;color:#92400e;margin:0 0 2px;">Coming Soon</p>
+            <p style="font-size:12px;color:#78350f;margin:0;">Local services — Labour, Plumber, Rapido-type booking</p>
+          </div>
+        </div>
+
+        <!-- Goal -->
+        <div style="text-align:center;padding:16px;margin-bottom:16px;">
+          <p style="font-size:15px;font-weight:700;color:#16a34a;font-style:italic;margin:0;">
+            "Making local markets digital and transparent"
+          </p>
+        </div>
+
+        <!-- Developer card -->
+        <div style="background:#f8fafc;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+          <div style="width:42px;height:42px;background:#16a34a;border-radius:12px;display:flex;align-items:center;justify-content:center;">
+            <span style="color:white;font-size:18px;font-weight:800;">A</span>
+          </div>
+          <div style="flex:1;">
+            <p style="font-size:14px;font-weight:800;color:#1e293b;margin:0;">Built by Aditya Soni</p>
+            <p style="font-size:12px;color:#94a3b8;margin:0;">Version 1.0 • Made with ❤️ in India 🇮🇳</p>
+          </div>
+        </div>
+
+        <!-- Close button -->
         <button onclick="document.getElementById('aboutModal').style.display='none';"
-          style="width:100%;padding:14px;background:#16a34a;color:white;border:none;
-          border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">
-          Close
+          style="width:100%;padding:16px;background:#16a34a;color:white;border:none;border-radius:14px;
+          font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;
+          box-shadow:0 4px 16px rgba(22,163,74,0.3);">
+          Done
         </button>
       </div>
     </div>
   `;
-
   modal.style.display = "flex";
   modal.onclick = e => { if (e.target === modal) modal.style.display = "none"; };
 }
@@ -2765,7 +2787,7 @@ window.submitShopRating = async function(shopId, shopName) {
 };
 
 // ===== SHOP DETAIL PAGE =====
-window.openShopDetail = function(shopJson) {
+window.viewShopDetail = function(shopJson) {
   let s;
   try { s = typeof shopJson === "string" ? JSON.parse(shopJson) : shopJson; }
   catch(e) { showToast("Error loading shop"); return; }
@@ -3180,4 +3202,61 @@ window.deleteSavedAddress = function(idx) {
   localStorage.setItem("zenvi_saved_addresses", JSON.stringify(saved));
   showToast("🗑️ Address deleted!");
   openLocationSelector(); // Refresh
+};
+
+// ===== EDIT MY SHOP =====
+window.editMyShop = function(shopJson) {
+  let s;
+  try { s = typeof shopJson === "string" ? JSON.parse(shopJson) : shopJson; } catch(e) { return; }
+
+  const typeOptions = ["sabji","phal","kirana","anaaj","dairy","mandi","other"];
+  const typeLabels = { sabji:"🥬 Sabji Bhandar", phal:"🍎 Phal Bhandar", kirana:"🛒 Kirana Store", 
+                       anaaj:"🌾 Anaaj/Dal", dairy:"🥛 Dairy/Milk", mandi:"🏪 Mandi/Wholesale", other:"✨ Other" };
+
+  let modal = document.getElementById("editShopModal");
+  if (!modal) { modal = document.createElement("div"); modal.id = "editShopModal"; document.body.appendChild(modal); }
+
+  modal.style.cssText = "position:fixed;inset:0;z-index:3500;background:white;overflow-y:auto;";
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:16px;background:white;border-bottom:1px solid #f1f5f9;position:sticky;top:0;z-index:1;">
+      <button onclick="document.getElementById('editShopModal').style.display='none';" style="background:none;border:none;cursor:pointer;">
+        <span class="material-icons-round">arrow_back</span>
+      </button>
+      <h2 style="font-size:17px;font-weight:800;margin:0;flex:1;">Edit My Shop</h2>
+      <button onclick="saveEditedShop('${s.id || s.name}')" 
+        style="background:#16a34a;color:white;border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">
+        Save
+      </button>
+    </div>
+    <div style="padding:16px;">
+      <div class="form-group"><label>Shop Name</label><input id="editShopName" value="${s.name}" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"></div>
+      <div class="form-group"><label>Owner Name</label><input id="editOwnerName" value="${s.owner}" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"></div>
+      <div class="form-group"><label>Phone</label><input id="editShopPhone" value="${s.phone||''}" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"></div>
+      <div class="form-group"><label>Address</label><input id="editShopAddress" value="${s.address||''}" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"></div>
+      <div class="form-group"><label>Main Items (comma separated)</label><input id="editShopItems" value="${s.items||''}" placeholder="Tomato, Potato, Onion" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;"></div>
+      <div class="form-group"><label>Description</label><textarea id="editShopDesc" rows="2" style="width:100%;padding:12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;">${s.desc||''}</textarea></div>
+      <button onclick="saveEditedShop('${s.id || s.name}')"
+        style="width:100%;padding:14px;background:#16a34a;color:white;border:none;border-radius:12px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:8px;">
+        💾 Save Changes
+      </button>
+    </div>`;
+
+  window._editingShopId = s.id || s.name;
+  modal.style.display = "block";
+};
+
+window.saveEditedShop = function(shopId) {
+  const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
+  const idx = shops.findIndex(s => s.id === shopId || s.name === shopId);
+  if (idx < 0) { showToast("⚠️ Shop nahi mila"); return; }
+  shops[idx].name = document.getElementById("editShopName")?.value.trim() || shops[idx].name;
+  shops[idx].owner = document.getElementById("editOwnerName")?.value.trim() || shops[idx].owner;
+  shops[idx].phone = document.getElementById("editShopPhone")?.value.trim() || shops[idx].phone;
+  shops[idx].address = document.getElementById("editShopAddress")?.value.trim() || shops[idx].address;
+  shops[idx].items = document.getElementById("editShopItems")?.value.trim() || shops[idx].items;
+  shops[idx].desc = document.getElementById("editShopDesc")?.value.trim() || shops[idx].desc;
+  localStorage.setItem("zenvi_shops", JSON.stringify(shops));
+  document.getElementById("editShopModal").style.display = "none";
+  showToast("✅ Shop updated!");
+  loadShopsList();
 };
