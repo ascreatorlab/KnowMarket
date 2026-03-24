@@ -1340,39 +1340,37 @@ function confirmAndProceed() {
     return;
   }
 
-  // Collect all possible names
   const nameEl = document.getElementById("selectedLocationName");
   const addrEl = document.getElementById("selectedLocationAddress");
   const shown  = (nameEl?.textContent || "").trim();
   const shownAddr = (addrEl?.textContent || "").trim();
   const curName = (currentLocation.name || "").trim();
 
-  // Bad values to reject
-  const BAD = new Set(["📍 Dhundh raha hai...","Map pe location chunein...",
+  const SKIP = new Set(["📍 Dhundh raha hai...","Map pe location chunein...",
     "Location selected ✓","Map drag karo ya search karein",
-    "Selected Area","My Location","Selecting..."]);
+    "Selected Area","My Location","Meri Location","My Area","Selecting...",""]);
 
-  const isGood = (n) => n && n.length > 2 && !BAD.has(n) && !isCoordinateString(n);
+  const good = (n) => n && n.length > 2 && !SKIP.has(n) && !isCoordinateString(n);
 
-  // Pick best name
-  let name = isGood(shown)   ? shown   :
-             isGood(curName) ? curName : "";
-  let addr = shownAddr || currentLocation.fullAddr || "";
+  let name = good(shown) ? shown : good(curName) ? curName : "";
+  let addr = (!SKIP.has(shownAddr) ? shownAddr : "") || currentLocation.fullAddr || "";
 
-  // If still loading and no valid name — wait for geocode, don't save bad name
-  if (!name || name === "📍 Dhundh raha hai..." || isCoordinateString(name)) {
-    // Try one more time from display
-    const shownAgain = (document.getElementById("selectedLocationName")?.textContent || "").trim();
-    if (shownAgain && !BAD.has(shownAgain) && !isCoordinateString(shownAgain) && shownAgain.length > 2) {
-      name = shownAgain;
-    } else {
-      showToast("⏳ Location naam aa raha hai... 2 second ruko");
-      setTimeout(() => confirmAndProceed(), 2000);
+  if (!name) {
+    // Retry after geocode
+    if (!window._confirmRetries) window._confirmRetries = 0;
+    window._confirmRetries++;
+    if (window._confirmRetries <= 6) {
+      showToast("⏳ Location naam aa raha hai...");
+      setTimeout(confirmAndProceed, 1000);
       return;
     }
+    // After 6 retries, use area name from reverse geocode or just save
+    window._confirmRetries = 0;
+    showToast("⚠️ Location naam nahi mila. Search se try karein.");
+    return;
   }
+  window._confirmRetries = 0;
 
-  // Save
   currentLocation.name = name;
   currentLocation.fullAddr = addr;
   localStorage.setItem("zenvi_location", JSON.stringify(currentLocation));
@@ -1380,30 +1378,22 @@ function confirmAndProceed() {
   localStorage.setItem("zenvi_location_addr", addr);
 
   // Update header
-  const homeAddr = document.getElementById("homeAddress");
-  if (homeAddr) {
-    homeAddr.innerText = addr && !addr.includes(name)
+  const homeAddrEl = document.getElementById("homeAddress");
+  if (homeAddrEl) {
+    homeAddrEl.innerText = addr && !addr.includes(name)
       ? name + ", " + addr.split(",")[0]
       : name;
   }
-  // Check if this matches a saved address label
-  const allSaved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
-  const matchedSaved = allSaved.find(a => a.name === name || (a.fullAddr||"").includes(name));
-  const locLabel2 = document.getElementById("locLabel");
-  if (locLabel2) {
-    const lbl = matchedSaved?.label || "Location";
-    const icons2 = {Home:"🏠",Work:"💼",Other:"📍",Location:"📍"};
-    locLabel2.textContent = (icons2[lbl]||"📍") + " " + lbl;
-  }
+  const locLabel = document.getElementById("locLabel");
+  if (locLabel) locLabel.textContent = "📍 Location";
 
-  // Cloud sync
   if (window.zenviAuth?.auth?.currentUser && window.saveLocationToCloud) {
     window.saveLocationToCloud(currentLocation);
   }
 
-  // Save as Home prompt (first time only)
-  const saved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
-  if (!saved.some(a => a.label === "Home") && isGood(name)) {
+  // Save as Home prompt if no home saved
+  const allSaved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+  if (!allSaved.some(a => a.label === "Home") && good(name)) {
     setTimeout(() => {
       const snack = document.createElement("div");
       snack.style.cssText = "position:fixed;bottom:110px;left:16px;right:16px;z-index:2000;background:#1e293b;color:white;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);";
@@ -1608,40 +1598,55 @@ function showToast(msg, duration = 3000) {
 // ===== RESTORE SAVED LOCATION =====
 function restoreSavedLocation() {
   try {
+    // First priority: check saved_addresses for Home label
+    const savedAddresses = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
+    const homeAddr = savedAddresses.find(a => a.label === "Home") || savedAddresses[0];
+    
     const saved = localStorage.getItem("zenvi_location");
     const savedName = localStorage.getItem("zenvi_location_name");
 
-    // Validate — reject ALL garbage values
     const INVALID = new Set(["Map pe location chunein...","Location selected",
       "Selected Location","null","undefined","","My Location","Meri Location",
       "Selected Area","My Area","Selecting...","Location selected ✓",
       "📍 Dhundh raha hai...","Map drag karo ya search karein"]);
     const isCoordinate = savedName && /^-?\d+\.\d+,?\s*-?\d+\.\d+$/.test(savedName.trim());
     const hasDigits = savedName && /\d+\.\d+/.test(savedName);
+    
     if (!saved || !savedName || INVALID.has(savedName) || isCoordinate || hasDigits) {
       localStorage.removeItem("zenvi_location");
       localStorage.removeItem("zenvi_location_name");
       localStorage.removeItem("zenvi_location_addr");
+      // Still try saved addresses
+      if (homeAddr && homeAddr.name && !INVALID.has(homeAddr.name)) {
+        currentLocation = { lat: homeAddr.lat, lng: homeAddr.lng, name: homeAddr.name, fullAddr: homeAddr.fullAddr||"" };
+        const el = document.getElementById("homeAddress");
+        if (el) el.innerText = homeAddr.floor ? homeAddr.floor+", "+homeAddr.name : homeAddr.name;
+        const locLabel = document.getElementById("locLabel");
+        if (locLabel) locLabel.textContent = "🏠 " + (homeAddr.label||"Home");
+      }
       return;
     }
 
     currentLocation = JSON.parse(saved);
     const addr = localStorage.getItem("zenvi_location_addr") || "";
-    const homeAddr = document.getElementById("homeAddress");
-    if (homeAddr && savedName && !savedName.match(/\d+\.\d+/)) {
-      homeAddr.innerText = savedName + (addr && !addr.includes(savedName) ? ", " + addr.split(",")[0] : "");
-      const savedAddresses = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
-      const matchAddr = savedAddresses.find(a => a.name === savedName || (a.fullAddr||"").includes(savedName));
-      const lbl = matchAddr?.label || "Location";
-      const locLabel = document.getElementById("locLabel");
-      if (locLabel) locLabel.textContent = (lbl==="Home"?"🏠":lbl==="Work"?"💼":"📍") + " " + lbl;
+    
+    // Show best available name
+    const displayName = homeAddr?.name || savedName;
+    const displayAddr = homeAddr?.fullAddr || addr;
+    
+    const homeAddrEl = document.getElementById("homeAddress");
+    if (homeAddrEl && displayName && !INVALID.has(displayName)) {
+      homeAddrEl.innerText = homeAddr?.floor 
+        ? homeAddr.floor + ", " + displayName 
+        : displayName + (displayAddr && !displayAddr.includes(displayName) ? ", " + displayAddr.split(",")[0] : "");
     }
+    
+    const lbl = homeAddr?.label || "Home";
+    const locLabel = document.getElementById("locLabel");
+    if (locLabel) locLabel.textContent = (lbl==="Home"?"🏠":lbl==="Work"?"💼":"📍") + " " + lbl;
 
     const locSection = document.getElementById("locationSection");
     if (locSection) locSection.classList.add("location-set");
-    // Update label
-    const locLabel = document.getElementById("locLabel");
-    if (locLabel) locLabel.innerHTML = "📍 <strong>Home</strong>";
     console.log("📍 Location restored:", savedName);
   } catch(e) {
     // Clear corrupted data
@@ -2845,8 +2850,21 @@ window.submitShopRating = async function(shopId, shopName) {
 
   const comment = document.getElementById("ratingComment")?.value.trim();
   const user = window.zenviAuth?.auth?.currentUser;
+  const uid = user?.uid || "guest";
 
-  // Save to localStorage
+  // Check if user already rated this shop
+  const userRatings = JSON.parse(localStorage.getItem("zenvi_user_ratings") || "{}");
+  if (userRatings[shopId]) {
+    showToast("⚠️ Aap pehle se is shop ko rate kar chuke hain!");
+    document.getElementById("rateShopModal").style.display = "none";
+    return;
+  }
+
+  // Mark user as rated
+  userRatings[shopId] = { stars, ratedAt: Date.now() };
+  localStorage.setItem("zenvi_user_ratings", JSON.stringify(userRatings));
+
+  // Save/update ratings
   const ratings = JSON.parse(localStorage.getItem("zenvi_shop_ratings") || "{}");
   if (!ratings[shopId]) ratings[shopId] = { total: 0, count: 0 };
   ratings[shopId].total += stars;
@@ -2854,13 +2872,14 @@ window.submitShopRating = async function(shopId, shopName) {
   ratings[shopId].avg = (ratings[shopId].total / ratings[shopId].count).toFixed(1);
   localStorage.setItem("zenvi_shop_ratings", JSON.stringify(ratings));
 
-  // Update shop in localStorage
+  // Update shop rating in localStorage (persists on refresh)
   const shops = JSON.parse(localStorage.getItem("zenvi_shops") || "[]");
-  const shop = shops.find(s => s.id === shopId || s.name === shopName);
-  if (shop) {
-    shop.rating = ratings[shopId].avg;
-    shop.ratingCount = ratings[shopId].count;
+  const shopIdx = shops.findIndex(s => s.id === shopId || s.name === shopName);
+  if (shopIdx >= 0) {
+    shops[shopIdx].rating = ratings[shopId].avg;
+    shops[shopIdx].ratingCount = ratings[shopId].count;
     localStorage.setItem("zenvi_shops", JSON.stringify(shops));
+    window._shopsData = shops;
   }
 
   // Save to Firebase
