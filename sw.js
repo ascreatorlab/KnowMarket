@@ -1,5 +1,10 @@
 // ===== ZENVI SERVICE WORKER v1.0 =====
-const CACHE_NAME = "zenvi-v1";
+const CACHE_NAME = "zenvi-v3";
+const PRECACHE = ["./","./index.html","./style.css","./script.js","./manifest.json"];
+// Notify on update
+self.addEventListener("message", e => {
+  if (e.data === "skipWaiting") self.skipWaiting();
+});
 const STATIC_FILES = [
   "./",
   "./index.html",
@@ -61,10 +66,7 @@ self.addEventListener("fetch", (e) => {
         }
         return response;
       }).catch(() => {
-        // Offline fallback
-        if (url.endsWith(".html") || url === "/" || url.includes("index")) {
-          return caches.match("./index.html");
-        }
+        return caches.match("./index.html");
       });
     })
   );

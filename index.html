@@ -504,9 +504,21 @@
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("./sw.js")
-        .then(() => console.log("✅ Zenvi SW registered"))
-        .catch(e => console.warn("SW failed:", e));
+      navigator.serviceWorker.register("./sw.js").then(reg => {
+        console.log("✅ Zenvi SW registered");
+        reg.addEventListener("updatefound", () => {
+          const newSW = reg.installing;
+          newSW.addEventListener("statechange", () => {
+            if (newSW.state === "installed" && navigator.serviceWorker.controller) {
+              // Show update toast
+              const toast = document.createElement("div");
+              toast.style.cssText = "position:fixed;bottom:100px;left:16px;right:16px;z-index:9999;background:#1e293b;color:white;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:10px;";
+              toast.innerHTML = `<span>🔄</span><p style="flex:1;font-size:13px;font-weight:600;margin:0;">Naya update available!</p><button onclick="newSW.postMessage('skipWaiting');location.reload();" style="background:#16a34a;color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Update</button>`;
+              document.body.appendChild(toast);
+            }
+          });
+        });
+      }).catch(e => console.warn("SW failed:", e));
     });
   }
 </script>

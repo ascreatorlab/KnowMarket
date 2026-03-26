@@ -85,6 +85,15 @@ window.submitPriceSuggestion = async function(itemName, suggestedPrice, location
   }
   if (!db) return false;
 
+  // Rate limiting: max 5 suggestions per day
+  const todayKey = "zenvi_suggest_" + new Date().toDateString() + "_" + user.uid;
+  const todayCount = parseInt(localStorage.getItem(todayKey) || "0");
+  if (todayCount >= 5) {
+    if (window.showToast) window.showToast("⚠️ Aaj 5 suggestions limit ho gayi. Kal dobara try karein!");
+    return false;
+  }
+  localStorage.setItem(todayKey, todayCount + 1);
+
   try {
     // Validate price — basic sanity check
     const price = parseFloat(suggestedPrice);
