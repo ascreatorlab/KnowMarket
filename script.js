@@ -1340,36 +1340,32 @@ function confirmAndProceed() {
     return;
   }
 
-  const nameEl = document.getElementById("selectedLocationName");
-  const addrEl = document.getElementById("selectedLocationAddress");
-  const shown  = (nameEl?.textContent || "").trim();
-  const shownAddr = (addrEl?.textContent || "").trim();
-  const curName = (currentLocation.name || "").trim();
+  const shown = (document.getElementById("selectedLocationName")?.textContent || "").trim();
+  const shownAddr = (document.getElementById("selectedLocationAddress")?.textContent || "").trim();
 
   const SKIP = new Set(["📍 Dhundh raha hai...","Map pe location chunein...",
-    "Location selected ✓","Map drag karo ya search karein",
-    "Selected Area","My Location","Meri Location","My Area","Selecting...",""]);
+    "Location selected ✓","Map drag karo ya search karein","Selected Area",
+    "My Location","Meri Location","My Area","Selecting...",""]);
 
-  const good = (n) => n && n.length > 2 && !SKIP.has(n) && !isCoordinateString(n);
+  const good = n => n && n.length > 2 && !SKIP.has(n) && !isCoordinateString(n);
 
-  let name = good(shown) ? shown : good(curName) ? curName : "";
-  let addr = (!SKIP.has(shownAddr) ? shownAddr : "") || currentLocation.fullAddr || "";
+  // Use best available name — NEVER block
+  let name = good(shown) ? shown
+    : good(currentLocation.name) ? currentLocation.name
+    : null;
 
+  // If geocode not done yet, use map label text if visible
   if (!name) {
-    // Retry after geocode
-    if (!window._confirmRetries) window._confirmRetries = 0;
-    window._confirmRetries++;
-    if (window._confirmRetries <= 6) {
-      showToast("⏳ Location naam aa raha hai...");
-      setTimeout(confirmAndProceed, 1000);
-      return;
-    }
-    // After 6 retries, use area name from reverse geocode or just save
-    window._confirmRetries = 0;
-    showToast("⚠️ Location naam nahi mila. Search se try karein.");
-    return;
+    const mapLabels = document.querySelectorAll(".mapboxgl-popup-content, .mappls-label, [class*='label']");
+    mapLabels.forEach(el => { if (!name && good(el.textContent?.trim())) name = el.textContent.trim(); });
   }
-  window._confirmRetries = 0;
+
+  // Last resort: use lat/lng area — still save and go home
+  if (!name) {
+    name = "Selected Location";
+  }
+
+  const addr = !SKIP.has(shownAddr) ? shownAddr : (currentLocation.fullAddr || "");
 
   currentLocation.name = name;
   currentLocation.fullAddr = addr;
@@ -1380,7 +1376,7 @@ function confirmAndProceed() {
   // Update header
   const homeAddrEl = document.getElementById("homeAddress");
   if (homeAddrEl) {
-    homeAddrEl.innerText = addr && !addr.includes(name)
+    homeAddrEl.innerText = (addr && !addr.includes(name))
       ? name + ", " + addr.split(",")[0]
       : name;
   }
@@ -1391,9 +1387,23 @@ function confirmAndProceed() {
     window.saveLocationToCloud(currentLocation);
   }
 
+  // Background: update name when geocode completes (if still loading)
+  if (!good(name) || name === "Selected Location") {
+    setTimeout(() => {
+      const finalName = (document.getElementById("selectedLocationName")?.textContent || "").trim();
+      if (good(finalName)) {
+        currentLocation.name = finalName;
+        localStorage.setItem("zenvi_location_name", finalName);
+        localStorage.setItem("zenvi_location", JSON.stringify(currentLocation));
+        const el = document.getElementById("homeAddress");
+        if (el) el.innerText = finalName;
+      }
+    }, 3000);
+  }
+
   // Save as Home prompt if no home saved
   const allSaved = JSON.parse(localStorage.getItem("zenvi_saved_addresses") || "[]");
-  if (!allSaved.some(a => a.label === "Home") && good(name)) {
+  if (!allSaved.some(a => a.label === "Home") && good(name) && name !== "Selected Location") {
     setTimeout(() => {
       const snack = document.createElement("div");
       snack.style.cssText = "position:fixed;bottom:110px;left:16px;right:16px;z-index:2000;background:#1e293b;color:white;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,0.3);";
@@ -1403,7 +1413,7 @@ function confirmAndProceed() {
     }, 1500);
   }
 
-  showToast("📍 " + name + " saved!");
+  showToast("📍 Location saved!");
   showPage("home");
 }
 
