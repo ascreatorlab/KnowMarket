@@ -1015,9 +1015,10 @@ async function reverseGeocode(lat, lng) {
       const r = data.results[0];
       console.log("🗺️ Mappls:", JSON.stringify(r));
       
-      // Extract ALL possible name fields - priority: most local first
-      const area = r.subSubLocality || r.subLocality || r.locality || 
-                   r.village || r.area || r.street || r.poi || "";
+      // Extract ALL possible name fields - VILLAGE FIRST priority
+      const area = r.village || r.subSubLocality || r.subLocality || 
+                   r.locality || r.area || r.street || r.poi || 
+                   r.subDistrict || "";
       const city = r.city || r.district || r.subDistrict || "";
       const state = r.state || "";
       const pincode = r.pincode || "";
@@ -1053,9 +1054,9 @@ async function reverseGeocode(lat, lng) {
     const data = await nominatimPromise;
     if (data) {
       const a = data.address || {};
-      const localName = a.hamlet || a.neighbourhood || a.quarter ||
-                        a.suburb || a.road || a.residential ||
-                        a.village || a.city_district;
+      const localName = a.hamlet || a.village || a.neighbourhood || 
+                        a.quarter || a.suburb || a.road || 
+                        a.residential || a.city_district;
       const cityName = a.city || a.town || a.municipality || a.district || "";
       const stateName = a.state || "";
       const cleanLocal = localName?.trim();
@@ -1388,15 +1389,25 @@ function confirmAndProceed() {
   const good = n => n && n.length > 2 && !SKIP.has(n) && !isCoordinateString(n);
 
   let name = good(shown) ? shown : good(currentLocation.name) ? currentLocation.name : "";
-  let addr = !SKIP.has(shownAddr) ? shownAddr : (currentLocation.fullAddr || "");
+  let addr = (!SKIP.has(shownAddr) && shownAddr) ? shownAddr : (currentLocation.fullAddr || "");
 
-  if (!name) name = "Selected Location";
+  // If geocode still loading, wait a bit then auto-proceed
+  if (!name) {
+    const btn = document.getElementById("confirmBtn");
+    if (btn) btn.innerHTML = "⏳ Loading...";
+    setTimeout(() => {
+      const n2 = (document.getElementById("selectedLocationName")?.textContent || "").trim();
+      if (btn) btn.innerHTML = "📍 Confirm Location";
+      currentLocation.name = good(n2) ? n2 : `Location (${currentLocation.lat.toFixed(3)}, ${currentLocation.lng.toFixed(3)})`;
+      confirmAndProceed();
+    }, 1500);
+    return;
+  }
 
   currentLocation.name = name;
   currentLocation.fullAddr = addr;
 
-  // Show address details form (Swiggy/Zomato style)
-  // This lets user add house no, landmark, save as Home/Work
+  // Show address details form
   showAddressDetailsForm(name, addr);
 }
 
@@ -1502,7 +1513,7 @@ function showAddressDetailsForm(locationName, locationAddr, existingAddr, editId
             value="${existingAddr?.phone || savedPhone}"
             maxlength="10" oninput="validateAddrForm()"
             style="flex:1;border:none;outline:none;font-size:14px;font-family:inherit;min-width:0;">
-          <span style="font-size:12px;font-weight:700;color:#16a34a;cursor:pointer;" onclick="showToast('📱 Phone verified')">VERIFY</span>
+          <span style="font-size:12px;font-weight:700;color:#16a34a;cursor:pointer;" onclick="verifyPhone()">VERIFY</span>
         </div>
         <p id="phoneError" style="font-size:11px;color:#ef4444;margin:4px 0 0;display:none;">⚠️ Valid 10-digit number required</p>
       </div>
@@ -2499,7 +2510,17 @@ function loadShopsList_inner() {} // placeholder
 function renderShopsList(shops) {
   const list = document.getElementById("shopsList");
   if (!list) return;
-  window._shopsData = shops; // Store globally for easy access
+  window._shopsData = shops;
+  // Merge saved ratings into shops
+  const savedRatings = JSON.parse(localStorage.getItem("zenvi_shop_ratings") || "{}");
+  shops = shops.map(s => {
+    const key = s.id || s.name;
+    if (savedRatings[key]) {
+      s.rating = savedRatings[key].avg;
+      s.ratingCount = savedRatings[key].count;
+    }
+    return s;
+  });
 
   const typeEmoji = {
     sabji:"🥬", phal:"🍎", kirana:"🛒", anaaj:"🌾",
@@ -4197,3 +4218,32 @@ function openMarketWatch() {
   modal.style.display = "flex";
   modal.onclick = e => { if (e.target === modal) modal.style.display = "none"; };
 }
+
+// ===== PHONE VERIFY =====
+window.verifyPhone = function() {
+  const phoneEl = document.getElementById("addrPhone");
+  if (!phoneEl) return;
+  const phone = phoneEl.value.replace(/\D/g, "").trim();
+
+  // Real validation
+  const allSame = /^(\d)\1{9}$/.test(phone); // 1111111111
+  if (phone.length !== 10) {
+    showToast("❌ 10-digit phone number required");
+    phoneEl.style.borderColor = "#ef4444";
+    return;
+  }
+  if (!/^[6-9]/.test(phone)) {
+    showToast("❌ Indian mobile: 6-9 se start hona chahiye");
+    phoneEl.style.borderColor = "#ef4444";
+    return;
+  }
+  if (allSame) {
+    showToast("❌ Valid phone number daalo");
+    phoneEl.style.borderColor = "#ef4444";
+    return;
+  }
+
+  phoneEl.style.borderColor = "#16a34a";
+  showToast("✅ Phone number valid!");
+  validateAddrForm();
+};
